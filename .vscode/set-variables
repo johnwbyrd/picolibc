@@ -1,0 +1,9 @@
+path_prepend() {
+    if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
+        PATH="$1${PATH:+":$PATH"}"
+    fi
+}
+
+export LLVM_MOS=/home/jbyrd/git/llvm-mos/build
+LLVM_MOS_BINARY_PATH=$($LLVM_MOS/bin/llvm-config --bindir)
+path_prepend "$LLVM_MOS_BINARY_PATH"
