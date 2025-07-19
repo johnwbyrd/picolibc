@@ -7,3 +7,5 @@ path_prepend() {
 export LLVM_MOS=/home/jbyrd/git/llvm-mos/build
 LLVM_MOS_BINARY_PATH=$($LLVM_MOS/bin/llvm-config --bindir)
 path_prepend "$LLVM_MOS_BINARY_PATH"
+
+export PICOLIBC_MOS_PREFIX="/home/jbyrd/git/picolibc/build"
