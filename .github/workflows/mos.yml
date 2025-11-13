@@ -10,6 +10,11 @@ on:
 jobs:
   build-mos-toolchain:
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_BUCKET: ${{ secrets.SCCACHE_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SCCACHE_REGION: ${{ secrets.SCCACHE_REGION }}
 
     steps:
     - name: Install dependencies
@@ -18,17 +23,58 @@ jobs:
         sudo apt-get install -y \
           cmake \
           ninja-build \
-          python3-pip \
+          meson \
           build-essential \
           git \
           zip
-        pip3 install meson
 
         # Verify installations
         cmake --version
         ninja --version
         meson --version
         python3 --version
+
+    - name: Install sccache from GitHub releases
+      run: |
+        echo "::group::Download sccache v0.12.0"
+        curl -L https://github.com/mozilla/sccache/releases/download/v0.12.0/sccache-v0.12.0-x86_64-unknown-linux-musl.tar.gz -o sccache.tar.gz
+        echo "::endgroup::"
+
+        echo "::group::Install sccache"
+        tar -xzf sccache.tar.gz
+        sudo mv sccache-v0.12.0-x86_64-unknown-linux-musl/sccache /usr/local/bin/
+        sudo chmod +x /usr/local/bin/sccache
+        rm -rf sccache.tar.gz sccache-v0.12.0-x86_64-unknown-linux-musl
+        echo "::endgroup::"
+
+        # Verify installation
+        sccache --version
+
+    - name: Check sccache configuration
+      run: |
+        # Explicitly mask secrets to prevent accidental exposure
+        if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+          echo "::add-mask::$AWS_ACCESS_KEY_ID"
+        fi
+        if [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
+          echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
+        fi
+
+        if [ -n "$SCCACHE_BUCKET" ]; then
+          echo "✓ sccache S3 backend configured"
+          echo "  Bucket: $SCCACHE_BUCKET"
+          echo "  Region: $SCCACHE_REGION"
+
+          # Start sccache server with S3 configuration
+          echo "Starting sccache server..."
+          sccache --start-server
+        else
+          echo "○ sccache will use local disk cache"
+        fi
+
+        # Show sccache stats
+        echo ""
+        sccache --show-stats
 
     - name: Clone and build llvm-mos
       run: |
@@ -46,8 +92,9 @@ jobs:
           -S llvm \
           -B build \
           -DCMAKE_BUILD_TYPE=Release \
-          -DBUILD_SHARED_LIBS=ON \
-          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/llvm-mos-install
+          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/llvm-mos-install \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         echo "::endgroup::"
 
         echo "::group::Build llvm-mos"
@@ -55,7 +102,7 @@ jobs:
         echo "::endgroup::"
 
         echo "::group::Install llvm-mos"
-        cmake --install build
+        cmake --build build --target install-distribution-stripped
         echo "::endgroup::"
 
         # Verify installation
