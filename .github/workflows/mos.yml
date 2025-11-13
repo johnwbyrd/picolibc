@@ -203,20 +203,22 @@ jobs:
         echo "PICOLIBC_NAME=${PICOLIBC_NAME}" >> $GITHUB_ENV
 
     - name: Upload LLVM-MOS artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ${{ env.LLVM_MOS_NAME }}
         path: ${{ env.LLVM_MOS_ARCHIVE }}
         retention-days: 90
         if-no-files-found: error
+        compression-level: 9
 
     - name: Upload Picolibc artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ${{ env.PICOLIBC_NAME }}
         path: ${{ env.PICOLIBC_ARCHIVE }}
         retention-days: 90
         if-no-files-found: error
+        compression-level: 9
 
     - name: Create build summary
       run: |
