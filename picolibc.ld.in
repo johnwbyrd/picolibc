@@ -42,13 +42,20 @@ ENTRY(@PREFIX@_start)
 
 MEMORY
 {@INIT_MEMORY@
-	flash (rx!w) :
+	rom (rx!w) :
 		ORIGIN = DEFINED(@PREFIX@__flash) ? @PREFIX@__flash : @DEFAULT_FLASH_ADDR@,
 		LENGTH = DEFINED(@PREFIX@__flash_size) ? @PREFIX@__flash_size : @DEFAULT_FLASH_SIZE@
 	ram (@RAM_MODE@) :
 		ORIGIN = DEFINED(@PREFIX@__ram) ? @PREFIX@__ram : @DEFAULT_RAM_ADDR@,
 		LENGTH = DEFINED(@PREFIX@__ram_size) ? @PREFIX@__ram_size : @DEFAULT_RAM_SIZE@
 }
+
+/*
+ * Alias flash to rom if flash exists, otherwise alias to ram.
+ * This allows RAM-only systems (like Commodore 64) to set __flash_size = 0
+ * and have all sections automatically placed in RAM.
+ */
+REGION_ALIAS("flash", (DEFINED(@PREFIX@__flash_size) && @PREFIX@__flash_size > 0) ? rom : ram);
 
 PHDRS
 {@INIT_PHDRS@

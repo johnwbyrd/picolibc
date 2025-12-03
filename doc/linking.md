@@ -83,6 +83,26 @@ in your linker script:
    malloc. Malloc will still be able to use all memory between the end
    of pre-allocate data and the bottom of the stack area.
 
+### RAM-Only Systems
+
+Some systems, such as the Commodore 64 or programs loaded from disk,
+have only RAM available and no ROM/flash. For these systems, simply set
+`__flash_size` to 0, and picolibc will automatically place all sections
+(including normally read-only .text and .rodata sections) in RAM:
+
+	__flash_size = 0;
+	__ram = 0x0800;
+	__ram_size = 0xC800;
+	__stack_size = 512;
+
+	INCLUDE picolibc.ld
+
+When `__flash_size` is 0, the linker script uses `REGION_ALIAS` to
+redirect all flash sections to RAM. Initialized data (.data) will have
+matching load and virtual addresses (LMA == VMA), so no copying is
+needed at startup - the program loader places everything directly where
+it will execute.
+
 ### Arranging Code and Data in Memory
 
 Where bits of code and data land in memory can be controlled to some

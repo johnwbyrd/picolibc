@@ -48,3 +48,6 @@ build-*/
 
 # ignore clangd
 .cache/
+
+# ignore vscode settings
+.vscode/
