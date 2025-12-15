@@ -203,7 +203,7 @@ jobs:
         echo "PICOLIBC_NAME=${PICOLIBC_NAME}" >> $GITHUB_ENV
 
     - name: Upload LLVM-MOS artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ env.LLVM_MOS_NAME }}
         path: ${{ env.LLVM_MOS_ARCHIVE }}
@@ -212,7 +212,7 @@ jobs:
         compression-level: 9
 
     - name: Upload Picolibc artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ env.PICOLIBC_NAME }}
         path: ${{ env.PICOLIBC_ARCHIVE }}
