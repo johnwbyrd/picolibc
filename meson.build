@@ -1289,6 +1289,10 @@ foreach params : [default_target] + targets
                                   meson.get_cross_property('extra_sbss_sections', ''))
     picolibc_linker_type_data.set('LINKER_PREAMBLE',
                                   meson.get_cross_property('linker_preamble', ''))
+    picolibc_linker_type_data.set('EXTRA_MEMORY',
+                                  meson.get_cross_property('extra_memory', ''))
+    picolibc_linker_type_data.set('EXTRA_SECTIONS',
+                                  meson.get_cross_property('extra_sections', ''))
 
     _default_noflash_flash_addr = meson.get_cross_property(
       'default_noflash_flash_addr_' + custom_mem_config,

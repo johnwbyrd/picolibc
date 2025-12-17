@@ -33,6 +33,16 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# MOS 6502 picocrt - uses shared crt0.c
-# No MOS-specific startup code needed; llvm-mos handles stack setup via linker.
-src_picocrt = files(meson.current_source_dir() / '..' / '..' / 'shared' / 'crt0.c')
+# MOS 6502 picocrt - uses shared crt0.c plus MOS-specific runtime support
+#
+# init-stack.S: Provides __do_init_stack which initializes the soft stack
+#               pointer (__rc0/__rc1) from the __stack symbol.
+#
+# call-indir.S: Provides __call_indir trampoline for indirect function calls.
+#               The 6502 lacks indirect JSR, so llvm-mos generates jsr __call_indir
+#               with the target address in __rc18/__rc19.
+src_picocrt = files(
+  meson.current_source_dir() / '..' / '..' / 'shared' / 'crt0.c',
+  'init-stack.S',
+  'call-indir.S'
+)

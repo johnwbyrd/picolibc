@@ -50,7 +50,7 @@ MEMORY
 	ram (@RAM_MODE@) :
 		ORIGIN = DEFINED(@PREFIX@__ram) ? @PREFIX@__ram : @DEFAULT_RAM_ADDR@,
 		LENGTH = DEFINED(@PREFIX@__ram_size) ? @PREFIX@__ram_size : @DEFAULT_RAM_SIZE@
-}
+@EXTRA_MEMORY@}
 
 /*
  * Alias flash to rom if flash exists, otherwise alias to ram.
@@ -415,6 +415,8 @@ SECTIONS
 	.stack (NOLOAD) : {
 		. += (DEFINED(@PREFIX@@STACK@_size) ? @PREFIX@@STACK@_size : @DEFAULT_STACK_SIZE@);
 	} >ram :ram
+
+@EXTRA_SECTIONS@
 
 @C@	/* Throw away C++ exception handling information */
 @C@
