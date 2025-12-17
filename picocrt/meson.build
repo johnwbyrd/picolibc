@@ -45,6 +45,11 @@ picocrt_machines = [
     # Suffix used on file names, QEMU's is empty because it is the default.
     'suffix': '',
   },
+  {
+    # ZBC semihosting via MAME emulator
+    'name': 'zbc',
+    'suffix': '-zbc',
+  },
 ]
 
 machine_dir = 'machine' / host_cpu_family

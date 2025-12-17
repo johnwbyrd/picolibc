@@ -1,7 +1,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Copyright © 2025 James Byrne
+# Copyright © 2025 John Byrd
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions

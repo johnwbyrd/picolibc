@@ -32,5 +32,9 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Virtual semihosting now uses ZBC backend
-subdir('../zbc')
+
+# MOS 6502 semihosting - use ZBC backend
+# src_zbc and c_args_zbc are defined in parent semihost/meson.build
+src_semihost += src_zbc
+c_args += c_args_zbc
+has_arm_semihost = true

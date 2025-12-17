@@ -33,8 +33,35 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-if [ -n "$PICOLIBC_MOS_PREFIX" ]; then
-    exec "$(dirname "$0")"/do-configure mos -Dc_args='-Wno-tautological-compare' --prefix="$PICOLIBC_MOS_PREFIX" "$@"
+# Note: tests-enable-stack-protector=false because llvm-mos doesn't support stack protector
+COMMON_ARGS="-Dc_args='-Wno-tautological-compare' -Dtests=true -Dtest-machine=zbc -Dsplit-large-tests=true -Dtests-enable-stack-protector=false"
+
+# Detect llvm-mos runtime library location for linking
+# Note: mos-clang --print-libgcc-file-name reports "mos" but actual dir is "mos-unknown-unknown"
+# So we find the builtins library by searching the clang lib directory
+CLANG_LIB=$(dirname "$(mos-clang --print-libgcc-file-name 2>/dev/null)" 2>/dev/null)
+CLANG_LIB_PARENT=$(dirname "$CLANG_LIB" 2>/dev/null)
+LIBRT_FILE=$(find "$CLANG_LIB_PARENT" -name 'libclang_rt.builtins.a' -print -quit 2>/dev/null)
+LIBRT_DIR=$(dirname "$LIBRT_FILE" 2>/dev/null)
+if [ -n "$LIBRT_DIR" ] && [ -d "$LIBRT_DIR" ]; then
+    # Generate a supplementary cross file with the library path
+    # Note: libgcc must be an array so meson treats -L and -l as separate arguments
+    CROSS_EXTRA=$(mktemp)
+    cat > "$CROSS_EXTRA" << EOF
+[properties]
+# Auto-detected llvm-mos runtime library directory
+libgcc = ['-L${LIBRT_DIR}', '-lclang_rt.builtins']
+EOF
+    CROSS_ARGS="--cross-file=$CROSS_EXTRA"
+    echo "Using llvm-mos runtime from: $LIBRT_DIR"
 else
-    exec "$(dirname "$0")"/do-configure mos -Dc_args='-Wno-tautological-compare' "$@"
+    echo "Warning: Could not find llvm-mos runtime library" >&2
+    echo "Make sure mos-clang is in PATH" >&2
+    CROSS_ARGS=""
+fi
+
+if [ -n "$PICOLIBC_MOS_PREFIX" ]; then
+    exec "$(dirname "$0")"/do-configure mos $CROSS_ARGS $COMMON_ARGS --prefix="$PICOLIBC_MOS_PREFIX" "$@"
+else
+    exec "$(dirname "$0")"/do-configure mos $CROSS_ARGS $COMMON_ARGS "$@"
 fi

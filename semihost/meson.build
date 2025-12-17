@@ -39,6 +39,16 @@ has_semihost = true
 
 src_semihost = []
 
+# ZBC semihosting client library (shared across ZBC-enabled architectures)
+src_zbc = files(
+  'zbc/zbc_client.c',
+  'zbc/zbc_riff.c',
+  'zbc/zbc_opcode_table.c',
+  'zbc/sys_semihost.c',
+)
+inc_zbc = include_directories('zbc')
+c_args_zbc = ['-DZBC_CLIENT']
+
 machine_dir = 'machine' / host_cpu_family
 if fs.is_dir(machine_dir)
   subdir(machine_dir)

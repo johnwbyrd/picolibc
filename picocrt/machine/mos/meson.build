@@ -32,5 +32,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Virtual semihosting now uses ZBC backend
-subdir('../zbc')
+
+# MOS 6502 picocrt - uses shared crt0.c
+# No MOS-specific startup code needed; llvm-mos handles stack setup via linker.
+src_picocrt = files(meson.current_source_dir() / '..' / '..' / 'shared' / 'crt0.c')

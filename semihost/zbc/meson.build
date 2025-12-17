@@ -32,5 +32,13 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Virtual semihosting now uses ZBC backend
-subdir('../zbc')
+
+# ZBC semihosting client library sources
+src_zbc = files(
+  'zbc_client.c',
+  'zbc_riff.c',
+  'zbc_opcode_table.c',
+)
+
+# Include path for ZBC headers
+inc_zbc = include_directories('.')

@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -32,5 +33,61 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Virtual semihosting now uses ZBC backend
-subdir('../zbc')
+# ZBC semihosting test wrapper for MAME
+#
+# Detects target architecture from ELF and runs appropriate MAME machine
+
+# Find MAME executable
+if [ -n "$MAME" ]; then
+    mame="$MAME"
+elif [ -x "$HOME/git/mame/mame" ]; then
+    mame="$HOME/git/mame/mame"
+elif command -v mame >/dev/null 2>&1; then
+    mame="mame"
+else
+    echo "Error: MAME not found. Set MAME environment variable or install mame." >&2
+    exit 77
+fi
+
+# ELF file is first argument
+elf="$1"
+shift
+
+if [ ! -f "$elf" ]; then
+    echo "Error: ELF file not found: $elf" >&2
+    exit 1
+fi
+
+# Detect architecture from ELF header
+elf_machine=$(readelf -h "$elf" 2>/dev/null | awk '/Machine:/ { print $2 }')
+
+case "$elf_machine" in
+    MOS)
+        machine=zbcm6502
+        ;;
+    *)
+        echo "Unsupported architecture: $elf_machine" >&2
+        exit 77
+        ;;
+esac
+
+# Check if MAME supports this machine
+if ! "$mame" -listfull "$machine" >/dev/null 2>&1; then
+    echo "Skipping: MAME does not support machine '$machine'" >&2
+    exit 77
+fi
+
+# Timeout in seconds (default 60, can be overridden via ZBC_TIMEOUT)
+timeout="${ZBC_TIMEOUT:-60}"
+
+# Run MAME with the ELF
+# -window: windowed mode (not fullscreen)
+# -skip_gameinfo: skip the startup info screen
+# -elfload: load ELF file directly
+# -seconds_to_run: timeout for test execution
+exec "$mame" "$machine" \
+    -window \
+    -skip_gameinfo \
+    -elfload "$elf" \
+    -seconds_to_run "$timeout" \
+    "$@"

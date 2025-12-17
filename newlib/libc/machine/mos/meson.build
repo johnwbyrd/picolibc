@@ -35,6 +35,13 @@
 
 srcs_machine = [
   'setjmp.S',
+  'const.S',
+  'mulsi3.c',
+  'divsi3.c',
+  'divhi3.c',
+  'divdi3.c',
+  'ashlsi3.c',
+  'memset.c',
 ]
 
 src_machine = files(srcs_machine)

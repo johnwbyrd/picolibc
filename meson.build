@@ -1275,6 +1275,21 @@ foreach params : [default_target] + targets
                                                   meson.get_cross_property(
                                                     'default_alignment', fallback_alignment))
 
+    picolibc_linker_type_data.set('EXTRA_TEXT_SECTIONS',
+                                  meson.get_cross_property('extra_text_sections', ''))
+    picolibc_linker_type_data.set('EXTRA_RODATA_SECTIONS',
+                                  meson.get_cross_property('extra_rodata_sections', ''))
+    picolibc_linker_type_data.set('EXTRA_DATA_SECTIONS',
+                                  meson.get_cross_property('extra_data_sections', ''))
+    picolibc_linker_type_data.set('EXTRA_SDATA_SECTIONS',
+                                  meson.get_cross_property('extra_sdata_sections', ''))
+    picolibc_linker_type_data.set('EXTRA_BSS_SECTIONS',
+                                  meson.get_cross_property('extra_bss_sections', ''))
+    picolibc_linker_type_data.set('EXTRA_SBSS_SECTIONS',
+                                  meson.get_cross_property('extra_sbss_sections', ''))
+    picolibc_linker_type_data.set('LINKER_PREAMBLE',
+                                  meson.get_cross_property('linker_preamble', ''))
+
     _default_noflash_flash_addr = meson.get_cross_property(
       'default_noflash_flash_addr_' + custom_mem_config,
       meson.get_cross_property('default_noflash_flash_addr', _default_flash_addr))
