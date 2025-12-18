@@ -115,7 +115,11 @@ __start(void)
 #endif
 
 #if defined(CRT0_SEMIHOST) && (defined(__ARM_SEMIHOST) || defined(__HEXAGON_ARCH__))
-#define CMDLINE_LEN 1024
+#if __SIZEOF_POINTER__ == 2
+#define CMDLINE_LEN     256     /* 16-bit targets: fits in 512-byte RIFF buffer */
+#else
+#define CMDLINE_LEN     1024
+#endif
 #define ARGV_LEN    64
     static char  cmdline[CMDLINE_LEN];
     static char *argv[ARGV_LEN];

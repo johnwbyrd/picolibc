@@ -88,6 +88,11 @@ static void zbc_init_once(void)
  * This function is called by picolibc's semihost/common/ layer via
  * the sys_semihost1/2/3 helper macros in semihost-private.h.
  *
+ * Most ARM semihosting calls pass param as a pointer to a parameter block
+ * (struct with arguments), which matches what zbc_semihost() expects.
+ * However, SYS_WRITEC and SYS_WRITE0 pass param as a direct pointer to
+ * the data, not a pointer to an args array. We wrap these two cases.
+ *
  * @param op    SYS_* opcode (ARM semihosting compatible)
  * @param param Pointer to parameter block (struct with arguments)
  * @return      Syscall result, or (uintptr_t)-1 on error
@@ -96,5 +101,13 @@ uintptr_t
 sys_semihost(uintptr_t op, uintptr_t param)
 {
     zbc_init_once();
+
+    /* SYS_WRITEC and SYS_WRITE0 pass direct pointers, not args arrays */
+    if (op == SH_SYS_WRITEC || op == SH_SYS_WRITE0) {
+        uintptr_t args[1];
+        args[0] = param;
+        return zbc_semihost(&zbc_state, zbc_riff_buf, ZBC_RIFF_BUF_SIZE, op, (uintptr_t)args);
+    }
+
     return zbc_semihost(&zbc_state, zbc_riff_buf, ZBC_RIFF_BUF_SIZE, op, param);
 }

@@ -4,10 +4,10 @@
 # early compiler tests will fail. This can be removed when picolibc
 # requires at least version 0.54.2 of meson.
 c = ['mos-clang', '-nostdlib', '-flto', '-D__COMPILING_MOS_LIBC__',
-     '-D__IEEE_LITTLE_ENDIAN', '-D_LDBL_EQ_DBL', '-Os',
+     '-D__IEEE_LITTLE_ENDIAN', '-D_LDBL_EQ_DBL', '-Os', '-g',
      '-Wno-tautological-compare' ]
 cpp = ['mos-clang', '-nostdlib', '-flto', '-D__COMPILING_MOS_LIBC__',
-     '-D__IEEE_LITTLE_ENDIAN', '-D_LDBL_EQ_DBL', '-Os',
+     '-D__IEEE_LITTLE_ENDIAN', '-D_LDBL_EQ_DBL', '-Os', '-g',
      '-Wno-tautological-compare' ]
 ar = 'llvm-ar'
 as = 'mos-clang'
