@@ -50,3 +50,7 @@ linker_preamble = '/* llvm-mos imaginary registers */ __rc0 = 0x00; __rc1 = __rc
 # pointer before falling through to _start. This symbol is defined by init-stack.S.
 extra_memory = '	vectors (r) : ORIGIN = 0xFFFA, LENGTH = 6'
 extra_sections = '	/* 6502 interrupt vectors */ .vectors (TYPE = SHT_PROGBITS) : { SHORT(0x0000); SHORT(__do_init_stack); SHORT(0x0000); } > vectors AT> vectors :text'
+
+# Build each math function as a separate test executable.
+# Required for MOS 6502 due to 64KB memory limit.
+per_function_math_tests = true

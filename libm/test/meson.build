@@ -47,6 +47,37 @@ else
   test_parts = ['-1']
 endif
 
+# Per-function math tests for memory-constrained targets (e.g., MOS 6502)
+per_function_math_tests = meson.get_cross_property('per_function_math_tests', false)
+
+# List of math functions that have individual *_vec.c test files
+math_vec_tests = [
+  'acos', 'acosf', 'acosh', 'acoshf',
+  'asin', 'asinf', 'asinh', 'asinhf',
+  'atan', 'atan2', 'atan2f', 'atanf', 'atanh', 'atanhf',
+  'ceil', 'ceilf',
+  'copysign', 'copysignf',
+  'cos', 'cosf', 'cosh', 'coshf',
+  'erf', 'erfc', 'erfcf', 'erff',
+  'exp', 'expf',
+  'fabs', 'fabsf',
+  'floor', 'floorf',
+  'fmod', 'fmodf',
+  'gamma', 'gammaf',
+  'hypot', 'hypotf',
+  'issignaling',
+  'j0', 'j0f', 'j1', 'j1f', 'jn', 'jnf',
+  'log', 'log10', 'log10f', 'log1p', 'log1pf', 'log2', 'log2f', 'logf',
+  'modf', 'modff',
+  'pow', 'powf',
+  'scalb', 'scalbn',
+  'sin', 'sinf', 'sinh', 'sinhf',
+  'sqrt', 'sqrtf',
+  'tan', 'tanf', 'tanh', 'tanhf',
+  'trunc', 'truncf',
+  'y0', 'y0f', 'y1', 'y1f', 'yn', 'ynf',
+]
+
 math_test_src = [
   'acosf_vec.c',
   'acoshf_vec.c',
@@ -148,6 +179,9 @@ endif
 
 skip_math_test = meson.get_cross_property('skip_math_test', [])
 
+# Skip monolithic math tests when per-function tests are enabled
+if not per_function_math_tests
+
 foreach params : targets
   target = params['name']
   target_dir = params['dir']
@@ -213,6 +247,8 @@ foreach params : targets
   endforeach
 endforeach
 
+endif # not per_function_math_tests
+
 if enable_native_math_tests
 
   native_lib_m = cc.find_library('m', required: false)
@@ -225,4 +261,60 @@ if enable_native_math_tests
 		    link_args: native_c_args,
 		    dependencies: native_lib_m))
   endif
+endif
+
+# Build per-function math tests for memory-constrained targets
+if per_function_math_tests
+  # Shared framework files needed by each individual test
+  # Note: dvec.c is NOT needed - it's only for test_cvt() conversion tests
+  math_test_framework = ['math.c', 'test.c']
+
+  foreach func : math_vec_tests
+    vec_file = func + '_vec.c'
+
+    foreach params : targets
+      target = params['name']
+      target_dir = params['dir']
+      target_c_args = params['c_args']
+
+      if target.strip('_') in skip_math_test
+        continue
+      endif
+
+      _libs = [get_variable('lib_c' + target)]
+      if is_variable('lib_semihost' + target)
+        _libs += [get_variable('lib_semihost' + target)]
+      endif
+
+      if is_variable(crt0_test + target)
+        _objs = [get_variable(crt0_test + target)]
+      else
+        _objs = []
+      endif
+
+      _c_args = target_c_args + get_variable('test_c_args' + target, test_c_args)
+      _link_args = target_c_args + get_variable('test_link_args' + target, test_link_args)
+      _link_depends = get_variable('test_link_depends' + target, test_link_depends)
+
+      # Use long-long printf (no float support) to save ~18KB per executable.
+      # Error messages show *float* instead of values, but hex output remains.
+      _c_args = printf_compile_args_l + _c_args
+      _link_args = printf_link_args_l + _link_args
+
+      test_name = 'math_test_' + func + target
+
+      test(test_name,
+           executable(test_name,
+                      [vec_file] + math_test_framework,
+                      c_args: _c_args + ['-DTEST_PART=-1', '-DTEST_FUNC=' + func],
+                      objects: _objs,
+                      link_args: _link_args,
+                      link_with: _libs,
+                      link_depends: _link_depends,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'math_func',
+           env: test_env)
+    endforeach
+  endforeach
 endif

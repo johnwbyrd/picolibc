@@ -33,6 +33,35 @@ extern char **environ;
 extern int    _malloc_test_fail;
 #endif
 
+#ifdef TEST_FUNC
+/*
+ * Single-function test mode for memory-constrained targets.
+ * When TEST_FUNC is defined (e.g., -DTEST_FUNC=sinf), only that
+ * one test function is called, keeping the executable small.
+ */
+#define _TEST_FUNC_CONCAT(a, b) a ## b
+#define _TEST_FUNC_EXPAND(x) _TEST_FUNC_CONCAT(test_, x)
+#define _TEST_FUNC_NAME _TEST_FUNC_EXPAND(TEST_FUNC)
+
+int
+main(int ac, char **av)
+{
+    (void)ac;
+    (void)av;
+
+    if (sizeof(double) < 8) {
+        printf("Skipping math tests on target without 64-bit double\n");
+        exit(77);
+    }
+
+    _TEST_FUNC_NAME(0);
+
+    printf("Tested 1 function, %d errors detected\n", inacc);
+    exit(inacc != 0);
+}
+
+#else /* !TEST_FUNC */
+
 int
 main(int ac, char **av)
 {
@@ -108,6 +137,8 @@ main(int ac, char **av)
 #endif
     exit(inacc != 0);
 }
+
+#endif /* TEST_FUNC */
 
 static const char *iname;
 void
