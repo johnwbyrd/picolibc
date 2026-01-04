@@ -1287,12 +1287,26 @@ foreach params : [default_target] + targets
                                   meson.get_cross_property('extra_bss_sections', ''))
     picolibc_linker_type_data.set('EXTRA_SBSS_SECTIONS',
                                   meson.get_cross_property('extra_sbss_sections', ''))
-    picolibc_linker_type_data.set('LINKER_PREAMBLE',
-                                  meson.get_cross_property('linker_preamble', ''))
-    picolibc_linker_type_data.set('EXTRA_MEMORY',
-                                  meson.get_cross_property('extra_memory', ''))
-    picolibc_linker_type_data.set('EXTRA_SECTIONS',
-                                  meson.get_cross_property('extra_sections', ''))
+
+    # Helper to resolve INCLUDE directives in linker properties
+    # If a property starts with 'INCLUDE ', read the file contents instead
+    linker_preamble = meson.get_cross_property('linker_preamble', '')
+    if linker_preamble.startswith('INCLUDE ')
+      linker_preamble = fs.read(linker_preamble.split(' ')[1].strip())
+    endif
+    picolibc_linker_type_data.set('LINKER_PREAMBLE', linker_preamble)
+
+    extra_memory = meson.get_cross_property('extra_memory', '')
+    if extra_memory.startswith('INCLUDE ')
+      extra_memory = fs.read(extra_memory.split(' ')[1].strip())
+    endif
+    picolibc_linker_type_data.set('EXTRA_MEMORY', extra_memory)
+
+    extra_sections = meson.get_cross_property('extra_sections', '')
+    if extra_sections.startswith('INCLUDE ')
+      extra_sections = fs.read(extra_sections.split(' ')[1].strip())
+    endif
+    picolibc_linker_type_data.set('EXTRA_SECTIONS', extra_sections)
 
     _default_noflash_flash_addr = meson.get_cross_property(
       'default_noflash_flash_addr_' + custom_mem_config,
