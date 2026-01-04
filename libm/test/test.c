@@ -303,7 +303,11 @@ void
 test_sok(char *is, char *shouldbe)
 {
     if (strcmp(is, shouldbe)) {
+#ifdef TINY_MATH_TEST
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, inacurate answer: (%s should be %s)\n", iname, theline, is, shouldbe);
+#endif
         inacc++;
     }
 }
@@ -311,7 +315,11 @@ void
 test_iok(int is, int shouldbe)
 {
     if (is != shouldbe) {
+#ifdef TINY_MATH_TEST
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, inacurate answer: (%08x should be %08x)\n", iname, theline, is, shouldbe);
+#endif
         inacc++;
     }
 }
@@ -323,7 +331,11 @@ void
 test_scok(char *is, char *shouldbe, int count)
 {
     if (strncmp(is, shouldbe, count)) {
+#ifdef TINY_MATH_TEST
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, inacurate answer: (%s should be %s)\n", iname, theline, is, shouldbe);
+#endif
         inacc++;
     }
 }
@@ -335,8 +347,12 @@ void
 test_scok2(char *is, char *maybe1, char *maybe2, int count)
 {
     if (strncmp(is, maybe1, count) && (maybe2 == NULL || strncmp(is, maybe2, count))) {
+#ifdef TINY_MATH_TEST
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, inacurate answer: (%s may be %s or %s)\n", iname, theline, is, maybe1,
                maybe2 ? maybe2 : "(nothing)");
+#endif
         inacc++;
     }
 }
@@ -345,7 +361,11 @@ void
 test_eok(int is, int shouldbe)
 {
     if (is != shouldbe) {
+#ifdef TINY_MATH_TEST
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, bad errno answer: (%d should be %d)\n", iname, theline, is, shouldbe);
+#endif
         inacc++;
     }
 }
@@ -370,10 +390,15 @@ test_mok(double value, double shouldbe, int okmag)
     b.value = value;
 
     if (mag < okmag) {
+#ifdef TINY_MATH_TEST
+        /* Minimal output for memory-constrained targets */
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, wrong answer: bit %d ", iname, theline, mag);
         printf("%08lx%08lx %08lx%08lx) ", (unsigned long)a.parts.msw, (unsigned long)a.parts.lsw,
                (unsigned long)b.parts.msw, (unsigned long)b.parts.lsw);
         printf("(%g %g)\n", a.value, b.value);
+#endif
         inacc++;
     }
 }
@@ -412,9 +437,14 @@ test_mfok(float value, float shouldbe, int okmag)
     b.value = value;
 
     if (mag < okmag) {
+#ifdef TINY_MATH_TEST
+        /* Minimal output for memory-constrained targets */
+        printf("%s:%d err\n", iname, theline);
+#else
         printf("%s:%d, wrong answer: bit %d ", iname, theline, mag);
         printf("%08lx %08lx) ", (unsigned long)a.p1, (unsigned long)b.p1);
         printf("(%g %g)\n", (double)a.value, (double)b.value);
+#endif
         inacc++;
     }
 }

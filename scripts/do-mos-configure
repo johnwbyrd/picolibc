@@ -34,7 +34,8 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Note: tests-enable-stack-protector=false because llvm-mos doesn't support stack protector
-COMMON_ARGS="-Dc_args='-Wno-tautological-compare' -Dtests=true -Dtest-machine=zbc -Dsplit-large-tests=true -Dtests-enable-stack-protector=false"
+# Use minimal printf (no width/precision/positional args) to save ~1.5KB per binary
+COMMON_ARGS="-Dc_args='-Wno-tautological-compare' -Dtests=true -Dtest-machine=zbc -Dsplit-large-tests=true -Dtests-enable-stack-protector=false -Dformat-default=m"
 
 # Detect llvm-mos runtime library location for linking
 # Note: mos-clang --print-libgcc-file-name reports "mos" but actual dir is "mos-unknown-unknown"

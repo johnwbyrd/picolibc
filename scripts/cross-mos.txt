@@ -49,3 +49,7 @@ extra_sections = 'INCLUDE picocrt/machine/mos/mos-sections.ld'
 # Build each math function as a separate test executable.
 # Required for MOS 6502 due to 64KB memory limit.
 per_function_math_tests = true
+
+# Use minimal error output in math tests to reduce code size.
+# Error messages only show function:line instead of full debug values.
+tiny_math_test = true

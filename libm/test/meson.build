@@ -269,6 +269,9 @@ if per_function_math_tests
   # Note: dvec.c is NOT needed - it's only for test_cvt() conversion tests
   math_test_framework = ['math.c', 'test.c']
 
+  # Use minimal error output to avoid pulling in %lx and %g format support
+  tiny_math_test_args = meson.get_cross_property('tiny_math_test', false) ? ['-DTINY_MATH_TEST'] : []
+
   foreach func : math_vec_tests
     vec_file = func + '_vec.c'
 
@@ -296,10 +299,9 @@ if per_function_math_tests
       _link_args = target_c_args + get_variable('test_link_args' + target, test_link_args)
       _link_depends = get_variable('test_link_depends' + target, test_link_depends)
 
-      # Use long-long printf (no float support) to save ~18KB per executable.
-      # Error messages show *float* instead of values, but hex output remains.
-      _c_args = printf_compile_args_l + _c_args
-      _link_args = printf_link_args_l + _link_args
+      # Use minimal printf for memory-constrained targets
+      _c_args = printf_compile_args_m + _c_args + tiny_math_test_args
+      _link_args = printf_link_args_m + _link_args
 
       test_name = 'math_test_' + func + target
 
