@@ -9,9 +9,17 @@
 
 #include <picolibc.h>
 
+/* Function prototypes */
+unsigned int __udivhi3(unsigned int a, unsigned int b);
+unsigned int __umodhi3(unsigned int a, unsigned int b);
+int __divhi3(int a, int b);
+int __modhi3(int a, int b);
+unsigned int __udivmodhi4(unsigned int a, unsigned int b, unsigned int *rem);
+int __divmodhi4(int a, int b, int *rem);
+
 /* Helper: unsigned 16-bit division */
 static unsigned int
-udivhi(unsigned int a, unsigned int b)
+__udivhi(unsigned int a, unsigned int b)
 {
     if (!b || b > a)
         return 0;
@@ -40,7 +48,7 @@ udivhi(unsigned int a, unsigned int b)
 
 /* Helper: unsigned 16-bit modulo */
 static unsigned int
-umodhi(unsigned int a, unsigned int b)
+__umodhi(unsigned int a, unsigned int b)
 {
     if (!b || b > a)
         return a;
@@ -66,14 +74,14 @@ umodhi(unsigned int a, unsigned int b)
 unsigned int
 __udivhi3(unsigned int a, unsigned int b)
 {
-    return udivhi(a, b);
+    return __udivhi(a, b);
 }
 
 /* Unsigned 16-bit modulo */
 unsigned int
 __umodhi3(unsigned int a, unsigned int b)
 {
-    return umodhi(a, b);
+    return __umodhi(a, b);
 }
 
 /* Signed 16-bit divide */
@@ -89,7 +97,7 @@ __divhi3(int a, int b)
         b = -b;
         neg ^= 1;
     }
-    int q = (int)udivhi((unsigned int)a, (unsigned int)b);
+    int q = (int)__udivhi((unsigned int)a, (unsigned int)b);
     return neg ? -q : q;
 }
 
@@ -104,7 +112,7 @@ __modhi3(int a, int b)
     }
     if (b < 0)
         b = -b;
-    int r = (int)umodhi((unsigned int)a, (unsigned int)b);
+    int r = (int)__umodhi((unsigned int)a, (unsigned int)b);
     return neg ? -r : r;
 }
 
@@ -112,7 +120,7 @@ __modhi3(int a, int b)
 unsigned int
 __udivmodhi4(unsigned int a, unsigned int b, unsigned int *rem)
 {
-    unsigned int q = udivhi(a, b);
+    unsigned int q = __udivhi(a, b);
     *rem = a - q * b;
     return q;
 }

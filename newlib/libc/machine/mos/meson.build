@@ -1,7 +1,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Copyright © 2022 Keith Packard
+# Copyright © 2026 John Byrd
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -37,8 +37,9 @@ srcs_machine = [
   'setjmp.S',
   'const.S',
   'mulsi3.c',
-  'divsi3.c',
+  'divqi3.c',
   'divhi3.c',
+  'divsi3.c',
   'divdi3.c',
   'ashlsi3.c',
   'memset.c',

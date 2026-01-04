@@ -9,9 +9,17 @@
 
 #include <picolibc.h>
 
+/* Function prototypes */
+unsigned long __udivsi3(unsigned long a, unsigned long b);
+unsigned long __umodsi3(unsigned long a, unsigned long b);
+long __divsi3(long a, long b);
+long __modsi3(long a, long b);
+unsigned long __udivmodsi4(unsigned long a, unsigned long b, unsigned long *rem);
+long __divmodsi4(long a, long b, long *rem);
+
 /* Helper: unsigned division */
 static unsigned long
-udivsi(unsigned long a, unsigned long b)
+__udivsi(unsigned long a, unsigned long b)
 {
     if (!b || b > a)
         return 0;
@@ -42,7 +50,7 @@ udivsi(unsigned long a, unsigned long b)
 
 /* Helper: unsigned modulo */
 static unsigned long
-umodsi(unsigned long a, unsigned long b)
+__umodsi(unsigned long a, unsigned long b)
 {
     if (!b || b > a)
         return a;
@@ -70,14 +78,14 @@ umodsi(unsigned long a, unsigned long b)
 unsigned long
 __udivsi3(unsigned long a, unsigned long b)
 {
-    return udivsi(a, b);
+    return __udivsi(a, b);
 }
 
 /* Unsigned 32-bit modulo */
 unsigned long
 __umodsi3(unsigned long a, unsigned long b)
 {
-    return umodsi(a, b);
+    return __umodsi(a, b);
 }
 
 /* Signed 32-bit divide */
@@ -93,7 +101,7 @@ __divsi3(long a, long b)
         b = -b;
         neg ^= 1;
     }
-    long q = (long)udivsi((unsigned long)a, (unsigned long)b);
+    long q = (long)__udivsi((unsigned long)a, (unsigned long)b);
     return neg ? -q : q;
 }
 
@@ -108,7 +116,7 @@ __modsi3(long a, long b)
     }
     if (b < 0)
         b = -b;
-    long r = (long)umodsi((unsigned long)a, (unsigned long)b);
+    long r = (long)__umodsi((unsigned long)a, (unsigned long)b);
     return neg ? -r : r;
 }
 
@@ -116,7 +124,7 @@ __modsi3(long a, long b)
 unsigned long
 __udivmodsi4(unsigned long a, unsigned long b, unsigned long *rem)
 {
-    unsigned long q = udivsi(a, b);
+    unsigned long q = __udivsi(a, b);
     *rem = a - q * b;
     return q;
 }

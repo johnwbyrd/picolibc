@@ -9,9 +9,17 @@
 
 #include <picolibc.h>
 
+/* Function prototypes */
+unsigned long long __udivdi3(unsigned long long a, unsigned long long b);
+unsigned long long __umoddi3(unsigned long long a, unsigned long long b);
+unsigned long long __udivmoddi4(unsigned long long a, unsigned long long b, unsigned long long *rem);
+long long __divdi3(long long a, long long b);
+long long __moddi3(long long a, long long b);
+long long __divmoddi4(long long a, long long b, long long *rem);
+
 /* Helper: unsigned 64-bit division */
 static unsigned long long
-udivdi(unsigned long long a, unsigned long long b)
+__udivdi(unsigned long long a, unsigned long long b)
 {
     if (!b || b > a)
         return 0;
@@ -40,7 +48,7 @@ udivdi(unsigned long long a, unsigned long long b)
 
 /* Helper: unsigned 64-bit modulo */
 static unsigned long long
-umoddi(unsigned long long a, unsigned long long b)
+__umoddi(unsigned long long a, unsigned long long b)
 {
     if (!b || b > a)
         return a;
@@ -66,21 +74,21 @@ umoddi(unsigned long long a, unsigned long long b)
 unsigned long long
 __udivdi3(unsigned long long a, unsigned long long b)
 {
-    return udivdi(a, b);
+    return __udivdi(a, b);
 }
 
 /* Unsigned 64-bit modulo */
 unsigned long long
 __umoddi3(unsigned long long a, unsigned long long b)
 {
-    return umoddi(a, b);
+    return __umoddi(a, b);
 }
 
 /* Combined unsigned divmod */
 unsigned long long
 __udivmoddi4(unsigned long long a, unsigned long long b, unsigned long long *rem)
 {
-    unsigned long long q = udivdi(a, b);
+    unsigned long long q = __udivdi(a, b);
     *rem = a - q * b;
     return q;
 }
@@ -98,7 +106,7 @@ __divdi3(long long a, long long b)
         b = -b;
         neg ^= 1;
     }
-    long long q = (long long)udivdi((unsigned long long)a, (unsigned long long)b);
+    long long q = (long long)__udivdi((unsigned long long)a, (unsigned long long)b);
     return neg ? -q : q;
 }
 
@@ -113,6 +121,15 @@ __moddi3(long long a, long long b)
     }
     if (b < 0)
         b = -b;
-    long long r = (long long)umoddi((unsigned long long)a, (unsigned long long)b);
+    long long r = (long long)__umoddi((unsigned long long)a, (unsigned long long)b);
     return neg ? -r : r;
+}
+
+/* Combined signed divmod */
+long long
+__divmoddi4(long long a, long long b, long long *rem)
+{
+    long long q = __divdi3(a, b);
+    *rem = a - q * b;
+    return q;
 }
