@@ -47,9 +47,6 @@ PROVIDE(__rc29 = __rc28 + 1);
 PROVIDE(__rc30 = __rc29 + 1);
 PROVIDE(__rc31 = __rc30 + 1);
 
-/* Trampoline for indirect function calls (6502 lacks indirect JSR) */
-__call_indir = 0;
-
 /* 6502 interrupt vector location - override for other 6502 variants */
 PROVIDE(__vectors_start = 0xFFFA);
 PROVIDE(__vectors_length = 6);
