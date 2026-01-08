@@ -62,7 +62,7 @@ __identity_page_table:
   .endif
   .endm
 
-#if defined(MACHINE_qemu)
+#if defined(MACHINE_qemu) || defined(MACHINE_zbc)
   start_page_table
   // [0x0000_0000,0x8000_0000): 2GiB normal memory
   page_table_entries 2, MMU_NORMAL_FLAGS
@@ -86,7 +86,7 @@ __identity_page_table:
 #error "Unknown machine type"
 #endif
 
-#if defined(MACHINE_qemu)
+#if defined(MACHINE_qemu) || defined(MACHINE_zbc)
   #define BOOT_EL(Reg) Reg ## _EL1
 #elif defined(MACHINE_fvp) && __ARM_ARCH_PROFILE == 'R'
   #define BOOT_EL(Reg) Reg ## _EL2
@@ -119,7 +119,7 @@ _start:
 
 	/* Enable FPU */
 #if __ARM_FP
-#if defined(MACHINE_qemu)
+#if defined(MACHINE_qemu) || defined(MACHINE_zbc)
 	mov x1, #(0x3 << 20)
 	msr BOOT_EL(CPACR), x1
 #elif defined(MACHINE_fvp)
@@ -178,7 +178,7 @@ _start:
   str x28, [sp, #224]
   str x29, [sp, #232]
   str x30, [sp, #240]
-#if defined(MACHINE_qemu)
+#if defined(MACHINE_qemu) || defined(MACHINE_zbc)
   mrs x0, BOOT_EL(ELR)
   str x0, [sp, #248]
   mrs x0, BOOT_EL(ESR)

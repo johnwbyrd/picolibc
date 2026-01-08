@@ -99,7 +99,7 @@ extern const void *__vector_table[];
 
 /* QEMU boots into EL1, and FVPs boot into EL3, so we need to use the correct
  * system registers. */
-#if defined(MACHINE_qemu)
+#if defined(MACHINE_qemu) || defined(MACHINE_zbc)
 #define BOOT_EL "EL1"
 #elif defined(MACHINE_fvp) && __ARM_ARCH_PROFILE == 'R'
 #define BOOT_EL "EL2"
