@@ -33,7 +33,13 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-src_semihost += files([
+# Machine directories can set semihost_skip_common to skip specific files
+# that they provide their own implementation of
+if not is_variable('semihost_skip_common')
+  semihost_skip_common = []
+endif
+
+srcs_semihost_common = [
                        'close.c',
                        'exit.c',
                        'fstat.c',
@@ -76,7 +82,15 @@ src_semihost += files([
                        'sys_tmpnam.c',
                        'sys_write.c',
                        'sys_write0.c',
-                     ])
+                     ]
+
+foreach file : srcs_semihost_common
+  if file not in semihost_skip_common
+    src_semihost += files(file)
+  else
+    message('semihost/common/' + file + ': machine overrides common')
+  endif
+endforeach
 
 inc_headers = ['semihost.h']
 if really_install

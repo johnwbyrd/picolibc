@@ -40,8 +40,13 @@
  * picolibc's existing semihost/common/ layer to work with ZBC devices.
  */
 
+#ifndef ZBC_CLIENT
 #define ZBC_CLIENT
+#endif
 #include "zbc_semihost.h"
+
+/* Forward declaration */
+uintptr_t sys_semihost(uintptr_t op, uintptr_t param);
 
 /*
  * Calculate ZBC device base address.

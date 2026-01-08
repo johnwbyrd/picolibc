@@ -38,3 +38,8 @@
 src_semihost += src_zbc
 c_args += c_args_zbc
 has_arm_semihost = true
+
+# MOS-specific overrides for files in semihost/common/
+# These avoid ARM semihosting constants that don't fit in 16-bit uintptr_t
+semihost_skip_common = ['exit.c', 'sys_exit_extended.c']
+src_semihost += files('exit.c', 'sys_exit_extended.c')
