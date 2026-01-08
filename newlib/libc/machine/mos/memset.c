@@ -11,6 +11,9 @@
 #include <picolibc.h>
 #include <string.h>
 
+/* Forward declaration for compiler builtin */
+void __memset(char *ptr, char value, size_t num);
+
 /*
  * Standard memset.
  */

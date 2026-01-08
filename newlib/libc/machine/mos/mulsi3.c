@@ -9,6 +9,12 @@
 
 #include <picolibc.h>
 
+/* Forward declarations for compiler builtins */
+char __mulqi3(char a, char b);
+unsigned int __mulhi3(unsigned int a, unsigned int b);
+unsigned long __mulsi3(unsigned long a, unsigned long b);
+unsigned long long __muldi3(unsigned long long a, unsigned long long b);
+
 /* 8-bit multiply */
 char
 __mulqi3(char a, char b)
