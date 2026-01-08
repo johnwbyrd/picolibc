@@ -59,7 +59,20 @@ if [ ! -f "$elf" ]; then
 fi
 
 # Detect architecture from ELF header
-elf_machine=$(readelf -h "$elf" 2>/dev/null | awk '/Machine:/ { print $2 }')
+# Try llvm-readelf first (needed for MOS), fall back to readelf
+# Check common locations for llvm-readelf
+llvm_readelf=""
+if command -v llvm-readelf >/dev/null 2>&1; then
+    llvm_readelf="llvm-readelf"
+elif [ -x "$HOME/git/llvm-mos/build/install/bin/llvm-readelf" ]; then
+    llvm_readelf="$HOME/git/llvm-mos/build/install/bin/llvm-readelf"
+fi
+
+if [ -n "$llvm_readelf" ]; then
+    elf_machine=$("$llvm_readelf" -h "$elf" 2>/dev/null | awk '/Machine:/ { print $2 }')
+else
+    elf_machine=$(readelf -h "$elf" 2>/dev/null | awk '/Machine:/ { print $2 }')
+fi
 
 case "$elf_machine" in
     MOS)
@@ -80,13 +93,16 @@ fi
 # Timeout in seconds (default 60, can be overridden via ZBC_TIMEOUT)
 timeout="${ZBC_TIMEOUT:-60}"
 
+# Run MAME headless (no video window)
+export SDL_VIDEODRIVER=dummy
+
 # Run MAME with the ELF
-# -window: windowed mode (not fullscreen)
+# -video none: no video output (headless)
 # -skip_gameinfo: skip the startup info screen
 # -elfload: load ELF file directly
 # -seconds_to_run: timeout for test execution
 exec "$mame" "$machine" \
-    -window \
+    -video none \
     -skip_gameinfo \
     -elfload "$elf" \
     -seconds_to_run "$timeout" \

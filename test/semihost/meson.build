@@ -97,6 +97,11 @@ foreach params : targets
   _link_depends = get_variable('test_link_depends' + target, test_link_depends)
 
   foreach semihost_test : semihost_tests
+    # Skip tests not in allowed_tests (when list is non-empty)
+    if allowed_tests.length() > 0 and not (semihost_test in allowed_tests)
+      continue
+    endif
+
     semihost_test_src = semihost_test + '.c'
 
     _cmd_arg = ['-DCOMMAND_LINE="' + 'program-name' + ' ' + ' '.join(cli_args) + '"']
@@ -120,6 +125,11 @@ foreach params : targets
   endforeach
 
   foreach semihost_fail_test : semihost_fail_tests
+    # Skip tests not in allowed_tests (when list is non-empty)
+    if allowed_tests.length() > 0 and not (semihost_fail_test in allowed_tests)
+      continue
+    endif
+
     semihost_fail_test_src = semihost_fail_test + '.c'
 
     test(semihost_fail_test + target,
@@ -139,6 +149,11 @@ foreach params : targets
   
   if has_semihost_args
     foreach semihost_test : semihost_no_args_tests
+      # Skip tests not in allowed_tests (when list is non-empty)
+      if allowed_tests.length() > 0 and not (semihost_test in allowed_tests)
+        continue
+      endif
+
       semihost_test_src = semihost_test + '.c'
 
       test(semihost_test + target,

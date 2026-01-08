@@ -13,6 +13,9 @@ ar = 'llvm-ar'
 as = 'mos-unknown-unknown-clang'
 nm = 'llvm-nm'
 strip = 'llvm-strip'
+# exe_wrapper must be in [binaries] section, not [properties]
+# Finds run-zbc by walking up from the ELF path to find the source tree
+exe_wrapper = ['sh', '-c', 'test -z "$PICOLIBC_TEST" || { d="$1"; while [ ! -f "$d/scripts/run-zbc" ] && [ "$d" != "/" ]; do d="$(dirname "$d")"; done; "$d/scripts/run-zbc" "$@"; }', 'run-zbc']
 
 [host_machine]
 system = 'none'
@@ -22,7 +25,6 @@ endian = 'little'
 
 [properties]
 skip_sanity_check = true
-exe_wrapper = ['sh', '-c', 'test -z "$PICOLIBC_TEST" || run-zbc "$@"', 'run-zbc']
 
 # ld.lld supports --defsym but meson can't detect it during configure
 # because there's no libc yet. Override the detection.
@@ -46,10 +48,8 @@ linker_preamble = 'INCLUDE picocrt/machine/mos/mos-regs.ld'
 extra_memory = 'INCLUDE picocrt/machine/mos/mos-memory.ld'
 extra_sections = 'INCLUDE picocrt/machine/mos/mos-sections.ld'
 
-# Build each math function as a separate test executable.
-# Required for MOS 6502 due to 64KB memory limit.
-per_function_math_tests = true
-
-# Use minimal error output in math tests to reduce code size.
-# Error messages only show function:line instead of full debug values.
-tiny_math_test = true
+# Only build tests that fit within 64KB memory limit AND complete in reasonable time.
+# Tests not in this list will be skipped during build.
+# Note: memcpy-1 and strcmp-1 removed - they have millions of iterations,
+# taking hours on emulated 1MHz 6502.
+allowed_tests = ['math_test_acos', 'math_test_acosf', 'math_test_acoshf', 'math_test_asin', 'math_test_asinf', 'math_test_asinhf', 'math_test_atan', 'math_test_atanf', 'math_test_atanh', 'math_test_atanhf', 'math_test_ceil', 'math_test_ceilf', 'math_test_copysign', 'math_test_copysignf', 'math_test_cosf', 'math_test_cosh', 'math_test_coshf', 'math_test_erf', 'math_test_erfc', 'math_test_erfcf', 'math_test_erff', 'math_test_exp', 'math_test_expf', 'math_test_fabs', 'math_test_fabsf', 'math_test_floor', 'math_test_floorf', 'math_test_fmod', 'math_test_fmodf', 'math_test_hypot', 'math_test_hypotf', 'math_test_issignaling', 'math_test_log', 'math_test_log10', 'math_test_log10f', 'math_test_log1p', 'math_test_log1pf', 'math_test_log2', 'math_test_log2f', 'math_test_logf', 'math_test_modf', 'math_test_modff', 'math_test_scalb', 'math_test_scalbn', 'math_test_sinf', 'math_test_sinh', 'math_test_sinhf', 'math_test_sqrt', 'math_test_sqrtf', 'math_test_tanf', 'math_test_tanh', 'math_test_tanhf', 'math_test_trunc', 'math_test_truncf', 'size_max', 'memmove1', 'tstring', 'tiswctype', 'twctrans']

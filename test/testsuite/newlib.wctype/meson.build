@@ -59,6 +59,11 @@ foreach params : targets
   _c_args += ['-D_XOPEN_SOURCE=700', '-D_GNU_SOURCE']
 
   foreach test : tests
+    # Skip tests not in allowed_tests (when list is non-empty)
+    if allowed_tests.length() > 0 and not (test in allowed_tests)
+      continue
+    endif
+
     test_name = test + target
 
     src = test + '.c'

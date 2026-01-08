@@ -47,9 +47,6 @@ else
   test_parts = ['-1']
 endif
 
-# Per-function math tests for memory-constrained targets (e.g., MOS 6502)
-per_function_math_tests = meson.get_cross_property('per_function_math_tests', false)
-
 # List of math functions that have individual *_vec.c test files
 math_vec_tests = [
   'acos', 'acosf', 'acosh', 'acoshf',
@@ -177,30 +174,14 @@ endif
 
 #  'dcvt.c',
 
-skip_math_test = meson.get_cross_property('skip_math_test', [])
-
-# Skip monolithic math tests when per-function tests are enabled
-if not per_function_math_tests
+# Monolithic math tests (all functions in one executable)
+# Skipped when allowed_tests is set (targets like MOS 6502 use per-function tests instead)
+if allowed_tests.length() == 0
 
 foreach params : targets
   target = params['name']
   target_dir = params['dir']
   target_c_args = params['c_args']
-
-  if target.strip('_') in skip_math_test
-    continue
-  endif
-  skip = false
-  foreach part : target.split('_')
-    if part != '' and part in skip_math_test
-      skip = true
-    endif
-  endforeach
-  if skip
-    continue
-  endif
-  
-
 
   _libs = [get_variable('lib_c' + target)]
   if is_variable('lib_semihost' + target)
@@ -247,7 +228,7 @@ foreach params : targets
   endforeach
 endforeach
 
-endif # not per_function_math_tests
+endif # allowed_tests.length() == 0
 
 if enable_native_math_tests
 
@@ -263,60 +244,57 @@ if enable_native_math_tests
   endif
 endif
 
-# Build per-function math tests for memory-constrained targets
-if per_function_math_tests
-  # Shared framework files needed by each individual test
-  # Note: dvec.c is NOT needed - it's only for test_cvt() conversion tests
-  math_test_framework = ['math.c', 'test.c']
+# Build per-function math tests (one executable per math function)
+# When allowed_tests is set, only build tests in the list
+# Shared framework files needed by each individual test
+# Note: dvec.c is NOT needed - it's only for test_cvt() conversion tests
+math_test_framework = ['math.c', 'test.c']
 
-  # Use minimal error output to avoid pulling in %lx and %g format support
-  tiny_math_test_args = meson.get_cross_property('tiny_math_test', false) ? ['-DTINY_MATH_TEST'] : []
+foreach func : math_vec_tests
+  vec_file = func + '_vec.c'
 
-  foreach func : math_vec_tests
-    vec_file = func + '_vec.c'
+  foreach params : targets
+    target = params['name']
+    target_dir = params['dir']
+    target_c_args = params['c_args']
 
-    foreach params : targets
-      target = params['name']
-      target_dir = params['dir']
-      target_c_args = params['c_args']
+    test_name = 'math_test_' + func + target
 
-      if target.strip('_') in skip_math_test
-        continue
-      endif
+    # Skip tests not in allowed_tests (when list is non-empty)
+    if allowed_tests.length() > 0 and not (('math_test_' + func) in allowed_tests)
+      continue
+    endif
 
-      _libs = [get_variable('lib_c' + target)]
-      if is_variable('lib_semihost' + target)
-        _libs += [get_variable('lib_semihost' + target)]
-      endif
+    _libs = [get_variable('lib_c' + target)]
+    if is_variable('lib_semihost' + target)
+      _libs += [get_variable('lib_semihost' + target)]
+    endif
 
-      if is_variable(crt0_test + target)
-        _objs = [get_variable(crt0_test + target)]
-      else
-        _objs = []
-      endif
+    if is_variable(crt0_test + target)
+      _objs = [get_variable(crt0_test + target)]
+    else
+      _objs = []
+    endif
 
-      _c_args = target_c_args + get_variable('test_c_args' + target, test_c_args)
-      _link_args = target_c_args + get_variable('test_link_args' + target, test_link_args)
-      _link_depends = get_variable('test_link_depends' + target, test_link_depends)
+    _c_args = target_c_args + get_variable('test_c_args' + target, test_c_args)
+    _link_args = target_c_args + get_variable('test_link_args' + target, test_link_args)
+    _link_depends = get_variable('test_link_depends' + target, test_link_depends)
 
-      # Use minimal printf for memory-constrained targets
-      _c_args = printf_compile_args_m + _c_args + tiny_math_test_args
-      _link_args = printf_link_args_m + _link_args
+    # Use minimal printf for per-function tests to reduce size
+    _c_args = printf_compile_args_m + _c_args
+    _link_args = printf_link_args_m + _link_args
 
-      test_name = 'math_test_' + func + target
-
-      test(test_name,
-           executable(test_name,
-                      [vec_file] + math_test_framework,
-                      c_args: _c_args + ['-DTEST_PART=-1', '-DTEST_FUNC=' + func],
-                      objects: _objs,
-                      link_args: _link_args,
-                      link_with: _libs,
-                      link_depends: _link_depends,
-                      include_directories: inc),
-           depends: bios_bin,
-           suite: 'math_func',
-           env: test_env)
-    endforeach
+    test(test_name,
+         executable(test_name,
+                    [vec_file] + math_test_framework,
+                    c_args: _c_args + ['-DTEST_PART=-1', '-DTEST_FUNC=' + func],
+                    objects: _objs,
+                    link_args: _link_args,
+                    link_with: _libs,
+                    link_depends: _link_depends,
+                    include_directories: inc),
+         depends: bios_bin,
+         suite: 'math_func',
+         env: test_env)
   endforeach
-endif
+endforeach

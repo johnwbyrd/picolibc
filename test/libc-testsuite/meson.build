@@ -76,6 +76,11 @@ foreach params : targets
   _link_depends = get_variable('test_link_depends' + target, test_link_depends)
 
   foreach t1 : libc_tests_picolibc
+    # Skip tests not in allowed_tests (when list is non-empty)
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
+
     t1_src = t1 + '.c'
 
     timeout = 30

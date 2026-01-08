@@ -1895,6 +1895,10 @@ if enable_picocrt
   subdir('picocrt')
 endif
 
+# Test filtering: when set, only build tests in this list
+# Used by memory-constrained targets (e.g., MOS 6502) to skip tests that don't fit
+allowed_tests = meson.get_cross_property('allowed_tests', [])
+
 # Build the C library
 
 subdir('libc')
