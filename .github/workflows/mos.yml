@@ -79,7 +79,7 @@ jobs:
     - name: Clone and build llvm-mos
       run: |
         echo "::group::Clone llvm-mos"
-        git clone https://github.com/llvm-mos/llvm-mos.git
+        git clone https://github.com/johnwbyrd/llvm-mos.git
         cd llvm-mos
         LLVM_MOS_COMMIT=$(git rev-parse --short HEAD)
         echo "llvm-mos commit: $LLVM_MOS_COMMIT"
