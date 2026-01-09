@@ -244,56 +244,58 @@ if enable_native_math_tests
 endif
 
 # Build per-function math tests (one executable per math function)
-# When allowed_tests is set, only build tests in the list
-# Shared framework files needed by each individual test
-# Note: dvec.c is NOT needed - it's only for test_cvt() conversion tests
-math_test_framework = ['math.c', 'test.c']
+# Only enabled when allowed_tests is set (for memory-constrained targets like MOS 6502)
+if allowed_tests.length() > 0
+  # Shared framework files needed by each individual test
+  # Note: dvec.c is NOT needed - it's only for test_cvt() conversion tests
+  math_test_framework = ['math.c', 'test.c']
 
-foreach func : math_vec_tests
-  vec_file = func + '_vec.c'
+  foreach func : math_vec_tests
+    vec_file = func + '_vec.c'
 
-  foreach params : targets
-    target = params['name']
-    target_dir = params['dir']
-    target_c_args = params['c_args']
+    foreach params : targets
+      target = params['name']
+      target_dir = params['dir']
+      target_c_args = params['c_args']
 
-    test_name = 'math_test_' + func + target
+      test_name = 'math_test_' + func + target
 
-    # Skip tests not in allowed_tests (when list is non-empty)
-    if allowed_tests.length() > 0 and not (('math_test_' + func) in allowed_tests)
-      continue
-    endif
+      # Skip tests not in allowed_tests
+      if not (('math_test_' + func) in allowed_tests)
+        continue
+      endif
 
-    _libs = [get_variable('lib_c' + target)]
-    if is_variable('lib_semihost' + target)
-      _libs += [get_variable('lib_semihost' + target)]
-    endif
+      _libs = [get_variable('lib_c' + target)]
+      if is_variable('lib_semihost' + target)
+        _libs += [get_variable('lib_semihost' + target)]
+      endif
 
-    if is_variable(crt0_test + target)
-      _objs = [get_variable(crt0_test + target)]
-    else
-      _objs = []
-    endif
+      if is_variable(crt0_test + target)
+        _objs = [get_variable(crt0_test + target)]
+      else
+        _objs = []
+      endif
 
-    _c_args = target_c_args + get_variable('test_c_args' + target, test_c_args)
-    _link_args = target_c_args + get_variable('test_link_args' + target, test_link_args)
-    _link_depends = get_variable('test_link_depends' + target, test_link_depends)
+      _c_args = target_c_args + get_variable('test_c_args' + target, test_c_args)
+      _link_args = target_c_args + get_variable('test_link_args' + target, test_link_args)
+      _link_depends = get_variable('test_link_depends' + target, test_link_depends)
 
-    # Use minimal printf for per-function tests to reduce size
-    _c_args = printf_compile_args_m + _c_args
-    _link_args = printf_link_args_m + _link_args
+      # Use minimal printf for per-function tests to reduce size
+      _c_args = printf_compile_args_m + _c_args
+      _link_args = printf_link_args_m + _link_args
 
-    test(test_name,
-         executable(test_name,
-                    [vec_file] + math_test_framework,
-                    c_args: _c_args + ['-DTEST_PART=-1', '-DTEST_FUNC=' + func],
-                    objects: _objs,
-                    link_args: _link_args,
-                    link_with: _libs,
-                    link_depends: _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'math_func',
-         env: test_env)
+      test(test_name,
+           executable(test_name,
+                      [vec_file] + math_test_framework,
+                      c_args: _c_args + ['-DTEST_PART=-1', '-DTEST_FUNC=' + func],
+                      objects: _objs,
+                      link_args: _link_args,
+                      link_with: _libs,
+                      link_depends: _link_depends,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'math_func',
+           env: test_env)
+    endforeach
   endforeach
-endforeach
+endif
