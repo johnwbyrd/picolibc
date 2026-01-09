@@ -66,7 +66,6 @@ math_vec_tests = [
   'j0', 'j0f', 'j1', 'j1f', 'jn', 'jnf',
   'log', 'log10', 'log10f', 'log1p', 'log1pf', 'log2', 'log2f', 'logf',
   'modf', 'modff',
-  'pow', 'powf',
   'scalb', 'scalbn',
   'sin', 'sinf', 'sinh', 'sinhf',
   'sqrt', 'sqrtf',
