@@ -33,26 +33,26 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-plain_tests_common = ['regex', 'ungetc',
+plain_tests_common = ['regex',
 	              'malloc',
-	              'ffs', 'setjmp', 'atexit', 'on_exit',
+	              'ffs',
+                      'setjmp',
+                      'atexit',
+                      'on_exit',
+                      'malloc_stress',
 	              'timegm',
                       'test-atomic',
                       'test-hello',
-                      'test-strchr', 'test-memchr',
-	              'test-memset', 'test-put',
 	              'test-raise',
-                      'test-sprintf-percent-n',
-                      'test-ctype',
                       'test-uchar',
                       'test-wctomb',
                       'test-scmpu',
                       'test-strftime',
-                      'test-strncpy',
                       'time-tests',
                       'test-time',
                       'test-getdate',
                       'test-wcsftime',
+                      'test-getopt',
 	      ]
 
 math_tests_common = [
@@ -71,33 +71,6 @@ if have_complex
   math_tests_common += 'complex-funcs'
 endif
 
-if newlib_nano_malloc or tests_enable_full_malloc_stress
-  math_tests_common += 'malloc_stress'
-endif
-
-if tinystdio
-  plain_tests_common += [
-    't_fmemopen',
-    'test-vfscanf-percent-a',
-  ]
-endif
-
-if tests_enable_posix_io
-  plain_tests_common += ['posix-io']
-
-  # legacy stdio doesn't work on semihosting, so just skip it
-  if tinystdio
-    plain_tests_common += ['test-fopen',
-                    'test-mktemp',
-                    'test-tmpnam',
-                    'test-fread-fwrite',
-                    'test-ungetc-ftell',
-                    'test-fgetc',
-                    'test-fgets-eof',
-                    'test-wchar',
-                   ]
-  endif
-endif
 
 math_tests = math_tests_common + [
   'math-funcs',
@@ -106,25 +79,8 @@ math_tests = math_tests_common + [
 plain_tests = plain_tests_common
 
 plain_tests += math_tests + [
-  'test-funopen',
-  'tls',  
+  'tls',
 ]
-
-plain_tests += ['test-memcpy_s',
-                'test-memset_s',
-                'test-memmove_s',
-                'test-strcat_s',
-                'test-strcpy_s',
-                'test-strerror_s',
-                'test-strerrorlen_s',
-                'test-strncat_s',
-                'test-strncpy_s',
-                'test-strnlen_s',
-               ]
-
-if tinystdio
-  plain_tests += 'test-sprintf_s'
-endif
 
 if tests_enable_stack_protector
   plain_tests += 'stack-smash'
@@ -132,10 +88,22 @@ endif
 
 plain_tests_native = plain_tests_common
 
-plain_tests_native += 'test-flockfile'
+no_flash_tests = []
+if test_noflash
+  no_flash_tests = [
+    'try-ilp32',
+    'hosted-exit',
+    'abort',
+    'test-except',
+    'test-hello-raw',
+    'test-ubsan',
+    'tls',
+    'test-argv',
+    'test-cplusplus',
+  ]
+endif
 
 math_tests_native = math_tests_common
-
 foreach params : targets
   target = params['name']
   target_dir = params['dir']
@@ -164,291 +132,284 @@ foreach params : targets
     _cpp_args = target_c_args + get_variable('test_cpp_args_' + target, test_cpp_args)
   endif
 
-  # Individual tests - skip if not in allowed_tests (when list is non-empty)
-  if allowed_tests.length() == 0 or 'printf_scanf' in allowed_tests
-    t1 = 'printf_scanf'
-    test(t1 + target,
-         executable(t1 + target, ['printf_scanf.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_d + _c_args,
-                    link_args: printf_link_args_d + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
+  if test_noflash
+    _test_link_args_noflash_variable = 'test_link_args_noflash' + target
+    _link_args_no_flash = target_c_args + _lib_files + get_variable('test_link_args_noflash' + target, test_link_args_noflash)
+    _link_depends_no_flash = get_variable('test_link_depends_noflash' + target, test_link_depends_noflash) + _libs
+    _objs_no_flash = get_variable('crt0_noflash_semihost' + target, get_variable('crt0_noflash_semihost' + target))
   endif
 
-  if allowed_tests.length() == 0 or 'printff_scanff' in allowed_tests
-    t1 = 'printff_scanff'
-    test(t1 + target,
-         executable(t1 + target, ['printf_scanf.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_f + _c_args,
-                    link_args: printf_link_args_f + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printfl_scanfl' in allowed_tests
-    t1 = 'printfl_scanfl'
-    test(t1 + target,
-         executable(t1 + target, ['printf_scanf.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_l + _c_args,
-                    link_args: printf_link_args_l + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printfi_scanfi' in allowed_tests
-    t1 = 'printfi_scanfi'
-    test(t1 + target,
-         executable(t1 + target, ['printf_scanf.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_i + _c_args,
-                    link_args: printf_link_args_i + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printfm_scanfm' in allowed_tests
-    t1 = 'printfm_scanfm'
-    test(t1 + target,
-         executable(t1 + target, ['printf_scanf.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_m + _c_args,
-                    link_args: printf_link_args_m + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printf-tests' in allowed_tests
-    t1 = 'printf-tests'
-    test(t1 + target,
-         executable(t1 + target, ['printf-tests.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_d + _c_args,
-                    link_args: printf_link_args_d + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printff-tests' in allowed_tests
-    t1 = 'printff-tests'
-    test(t1 + target,
-         executable(t1 + target, ['printf-tests.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_f + _c_args,
-                    link_args: printf_link_args_f + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printfi-tests' in allowed_tests
-    t1 = 'printfi-tests'
-    test(t1 + target,
-         executable(t1 + target, ['printf-tests.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_i + _c_args,
-                    link_args: printf_link_args_i + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'printfm-tests' in allowed_tests
-    t1 = 'printfm-tests'
-    test(t1 + target,
-         executable(t1 + target, ['printf-tests.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_m + _c_args,
-                    link_args: printf_link_args_m + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'time-sprintf' in allowed_tests
-    t1 = 'time-sprintf'
-    test(t1 + target,
-         executable(t1 + target, ['time-sprintf.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_i + _c_args + ['-fno-builtin'],
-                    link_args: printf_link_args_i + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'try-ilp32' in allowed_tests
-    t1 = 'try-ilp32'
+  t1 = 'try-ilp32'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, ['try-ilp32.c', 'try-ilp32-sub.c', 'lock-valid.c'],
-                    c_args: _c_args,
-                    link_args: _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: _c_args,
+		    link_args: _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env)
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, ['try-ilp32.c', 'try-ilp32-sub.c', 'lock-valid.c'],
+                      c_args: _c_args,
+                      link_args: _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env)
+    endif
   endif
 
-  if allowed_tests.length() == 0 or 'hosted-exit' in allowed_tests
-    t1 = 'hosted-exit'
-    t1_fail = t1 + '-fail'
-
+  t1 = 'hosted-exit'
+  t1_fail = t1 + '-fail'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, ['hosted-exit.c', 'lock-valid.c'],
-                    c_args: _c_args,
-                    link_args:  _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: _c_args,
+		    link_args:  _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env)
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, ['hosted-exit.c', 'lock-valid.c'],
+                      c_args: _c_args,
+                      link_args:  _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env)
+    endif
 
     test(t1_fail + target,
          executable(t1_fail + target, ['hosted-exit.c', 'lock-valid.c'],
-                    c_args: _c_args + ['-DRETVAL=1'],
-                    link_args:  _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: _c_args + ['-DRETVAL=1'],
+		    link_args:  _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env,
          should_fail: true
         )
+
+    if no_flash_tests.contains(t1)
+      test(t1_fail + '-no-flash' + target,
+           executable(t1_fail + '-no-flash' + target, ['hosted-exit.c', 'lock-valid.c'],
+                      c_args: _c_args + ['-DRETVAL=1'],
+                      link_args:  _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env,
+           should_fail: true
+          )
+    endif
   endif
 
-  if allowed_tests.length() == 0 or 'abort' in allowed_tests
-    t1 = 'abort'
+  t1 = 'abort'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, ['abort.c', 'lock-valid.c'],
-                    c_args: _c_args,
-                    link_args:  _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: _c_args,
+		    link_args:  _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env,
          should_fail: true
         )
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, ['abort.c', 'lock-valid.c'],
+                      c_args: _c_args,
+                      link_args:  _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env,
+           should_fail: true
+          )
+    endif
   endif
 
   # POSIX console code requires a constructor to run, so
   # it is incompatible with the minimal crt0 when using stdout
   # (which lock-valid.c uses).
 
-  if is_variable('crt0_minimal' + target) and not posix_console and (allowed_tests.length() == 0 or 'constructor-skip' in allowed_tests)
+  if is_variable('crt0_minimal' + target) and not posix_console
     _objs_minimal = [get_variable('crt0_minimal'+ target)]
     t1 = 'constructor-skip'
-    test(t1 + target,
-         executable(t1 + target, ['constructor-skip.c', 'lock-valid.c'],
-                    c_args: _c_args,
-                    link_args:  _link_args,
-                    objects: _objs_minimal,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
+    if allowed_tests.length() == 0 or t1 in allowed_tests
+      test(t1 + target,
+	   executable(t1 + target, ['constructor-skip.c', 'lock-valid.c'],
+		      c_args: _c_args,
+		      link_args:  _link_args,
+		      objects: _objs_minimal,
+		      link_depends:  _link_depends,
+		      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test',
+	   env: test_env)
+    endif
   endif
 
-  if allowed_tests.length() == 0 or 'math_errhandling' in allowed_tests
-    t1 = 'math_errhandling'
+  if is_variable('crt0_inittls_semihost' + target)
+    _link_inittls_args = target_c_args + _lib_files + get_variable('test_inittls_link_args' + target, test_link_args)
+    _link_inittls_depends = get_variable('test_inittls_link_depends' + target, test_inittls_link_depends) + _libs
+    _objs_inittls = [get_variable('crt0_inittls_semihost'+ target)]
+    t1 = 'tls-init'
+    if allowed_tests.length() == 0 or t1 in allowed_tests
+      test(t1 + target,
+	   executable(t1 + target, ['tls.c', 'lock-valid.c'],
+		      c_args: _c_args + ['-DINIT_TLS'],
+		      link_args:  _link_inittls_args,
+		      objects: _objs_inittls,
+		      link_depends:  _link_inittls_depends,
+		      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test',
+	   env: test_env)
+    endif
+  endif
+
+  t1 = 'math_errhandling'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, ['math_errhandling.c'],
-                    c_args: arg_fnobuiltin + _c_args,
-                    link_args: _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: arg_fnobuiltin + _c_args,
+		    link_args: _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env)
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, ['math_errhandling.c'],
+                      c_args: arg_fnobuiltin + _c_args,
+                      link_args: _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env)
+    endif
   endif
 
-  if allowed_tests.length() == 0 or 'rounding-mode' in allowed_tests
-    t1 = 'rounding-mode'
+  t1 = 'rounding-mode'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, ['rounding-mode.c', 'rounding-mode-sub.c'],
-                    c_args: arg_fnobuiltin + _c_args,
-                    link_args: _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: arg_fnobuiltin + _c_args,
+		    link_args: _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env)
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, ['rounding-mode.c', 'rounding-mode-sub.c'],
+                      c_args: arg_fnobuiltin + _c_args,
+                      link_args: _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env)
+    endif
   endif
 
-  if allowed_tests.length() == 0 or 'test-except' in allowed_tests
-    t1 = 'test-except'
-    t1_src = t1 + '.c'
+  t1 = 'test-except'
+  t1_src = t1 + '.c'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, [t1_src, 'lock-valid.c'],
-                    c_args: printf_compile_args_d + arg_fnobuiltin + _c_args,
-                    link_args: printf_link_args_d + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: printf_compile_args_d + arg_fnobuiltin + _c_args,
+		    link_args: printf_link_args_d + _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env,
          should_fail: true
         )
+
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, [t1_src, 'lock-valid.c'],
+                      c_args: printf_compile_args_d + arg_fnobuiltin + _c_args,
+                      link_args: printf_link_args_d + _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env,
+           should_fail: true
+          )
+    endif
   endif
 
-  if allowed_tests.length() == 0 or 'long_double' in allowed_tests
-    t1 = 'long_double'
-    t1_src = t1 + '.c'
+  t1 = 'long_double'
+  t1_src = t1 + '.c'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
     test(t1 + target,
          executable(t1 + target, t1_src,
-                    c_args: printf_compile_args_d + _c_args,
-                    link_args: printf_link_args_d + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
+		    c_args: printf_compile_args_d + _c_args,
+		    link_args: printf_link_args_d + _link_args,
+		    objects: _objs,
+		    link_depends:  _link_depends,
+		    include_directories: inc),
          depends: bios_bin,
          suite: 'test',
          env: test_env,
          timeout: 90,
         )
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, t1_src,
+                      c_args: printf_compile_args_d + _c_args,
+                      link_args: printf_link_args_d + _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env,
+           timeout: 90,
+          )
+    endif
   endif
 
-  if is_variable('lib_semihost_raw' + target) and test_machine == 'qemu' and (allowed_tests.length() == 0 or 'test-hello-raw' in allowed_tests)
+  if is_variable('lib_semihost_raw' + target) and test_machine == 'qemu'
+
     _libs_raw = [get_variable('lib_c' + target)]
     _libs_raw += [get_variable('lib_semihost_raw' + target)]
-
+    
     _lib_raw_files=[]
     foreach _lib_raw : _libs_raw
       _lib_raw_files += _lib_raw.full_path()
@@ -465,52 +426,42 @@ foreach params : targets
 
     t1 = 'test-hello-raw'
     t1_src = 'test-hello.c'
-    test(t1 + target,
-         executable(t1 + target, t1_src,
-                    c_args: printf_compile_args_d + _c_args,
-                    link_args: printf_link_args_d + _link_raw_args,
-                    objects: _objs_raw,
-                    link_depends:  _link_raw_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env,
-         timeout: 90,
-        )
+    if allowed_tests.length() == 0 or t1 in allowed_tests
+      test(t1 + target,
+           executable(t1 + target, t1_src,
+		      c_args: printf_compile_args_d + _c_args,
+		      link_args: printf_link_args_d + _link_raw_args,
+		      objects: _objs_raw,
+		      link_depends:  _link_raw_depends,
+		      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test',
+           env: test_env,
+           timeout: 90,
+          )
+
+      if no_flash_tests.contains(t1)
+        # Build raw no-flash using hosted crt0 noflash variant and raw libs
+        _link_raw_args_no_flash = target_c_args + _lib_raw_files + get_variable('test_link_args_noflash' + target, test_link_args_noflash)
+        _link_raw_depends_no_flash = get_variable('test_link_depends_noflash' + target, test_link_depends_noflash) + _libs_raw
+        _objs_raw_noflash = [get_variable('crt0_noflash_hosted' + target)]
+        test(t1 + '-no-flash' + target,
+             executable(t1 + '-no-flash' + target, t1_src,
+                        c_args: printf_compile_args_d + _c_args,
+                        link_args: printf_compile_args_d + _link_raw_args_no_flash,
+                        objects: _objs_raw_noflash,
+                        link_depends:  _link_raw_depends_no_flash,
+                        include_directories: inc),
+             depends: bios_bin,
+             suite: 'test-no-flash',
+             env: test_env,
+             timeout: 90,
+            )
+      endif
+    endif
   endif
 
-  if get_option('test-stdin') and (allowed_tests.length() == 0 or 'test-gets' in allowed_tests)
-    t1 = 'test-gets'
-    t1_src = 'test-gets.c'
-
-    test_gets = executable(t1 + target, t1_src,
-                           c_args: _c_args,
-                           link_args: _link_args,
-                           objects: _objs,
-                           link_depends:  _link_depends,
-                           include_directories: inc)
-
-    test(t1 + target + '-success',
-         test_gets,
-         depends: bios_bin,
-         args: ['hi'],
-         suite: 'test',
-         env: test_env,
-         timeout: 90
-        )
-
-    test(t1 + target + '-failure',
-         test_gets,
-         depends: bios_bin,
-         args: ['this is a long string that should overflow the buffer'],
-         suite: 'test',
-         env: test_env,
-         timeout: 90,
-         should_fail: true
-        )
-  endif
-
-  if c_sanitize_flags != [] and (allowed_tests.length() == 0 or 'test-ubsan' in allowed_tests)
+  if c_sanitize_flags != []
     t1 = 'test-ubsan'
     t1_src = t1 + '.c'
 
@@ -519,60 +470,45 @@ foreach params : targets
       test_ubsan_flags = ['-DSANITIZE_TRAP_ON_ERROR']
     endif
 
-    test(t1 + target,
-         executable(t1 + target, t1_src,
-                    c_args: c_sanitize_flags + _c_args + test_ubsan_flags,
-                    link_args: _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env,
-         should_fail: sanitize_trap_on_error
-        )
-  endif
-
-  if allowed_tests.length() == 0 or 'test-long-longl' in allowed_tests
-    t1 = 'test-long-longl'
-    test(t1 + target,
-         executable(t1 + target, ['test-long-long.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_l + _c_args,
-                    link_args: printf_link_args_l + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         timeout: 120,
-         priority: -1,
-         suite: 'test',
-         env: test_env)
-  endif
-
-  if allowed_tests.length() == 0 or 'test-long-long' in allowed_tests
-    t1 = 'test-long-long'
-    test(t1 + target,
-         executable(t1 + target, ['test-long-long.c', 'lock-valid.c'],
-                    c_args: printf_compile_args_d + _c_args,
-                    link_args: printf_link_args_d + _link_args,
-                    objects: _objs,
-                    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         timeout: 120,
-         priority: -1,
-         suite: 'test',
-         env: test_env)
+    if allowed_tests.length() == 0 or t1 in allowed_tests
+      test(t1 + target,
+           executable(t1 + target, t1_src,
+                      c_args: c_sanitize_flags + _c_args + test_ubsan_flags,
+                      link_args: _link_args,
+                      objects: _objs,
+                      link_depends:  _link_depends,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test',
+           env: test_env,
+           should_fail: sanitize_trap_on_error
+          )
+      if no_flash_tests.contains(t1)
+        test(t1 + '-no-flash' + target,
+             executable(t1 + '-no-flash' + target, t1_src,
+                        c_args: c_sanitize_flags + _c_args + test_ubsan_flags,
+                        link_args: _link_args_no_flash,
+                        objects: _objs_no_flash,
+                        link_depends:  _link_depends_no_flash,
+                        include_directories: inc),
+             depends: bios_bin,
+             suite: 'test-no-flash',
+             env: test_env,
+             should_fail: sanitize_trap_on_error
+            )
+      endif
+    endif
   endif
 
   foreach t1 : plain_tests
-    # Skip tests not in allowed_tests (when list is non-empty)
+    # Skip tests not in allowed_tests (when allowed_tests is set)
     if allowed_tests.length() > 0 and not (t1 in allowed_tests)
       continue
     endif
 
     t1_src = t1 + '.c'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1 + target + '.txt"']
+    test_file_name_arg_no_flash=['-DTEST_FILE_NAME="' + t1 + '_no_flash_' + target + '.txt"']
 
     test(t1 + target,
 	 executable(t1 + target, [t1_src, 'lock-valid.c'],
@@ -585,58 +521,110 @@ foreach params : targets
 	 timeout: 60,
          suite: 'test',
 	 env: test_env)
+
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target, [t1_src, 'lock-valid.c'],
+                    c_args: printf_compile_args_d + test_file_name_arg_no_flash + _c_args + ['-DINIT_TLS'],
+                    link_args: printf_link_args_d + _link_args_no_flash,
+                    objects: _objs_no_flash,
+                    link_depends:  _link_depends_no_flash,
+                    include_directories: inc),
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env)
+    endif
   endforeach
+
+  t1 = 'test-argv'
+  t1_src = t1 + '.c'
+  if allowed_tests.length() == 0 or t1 in allowed_tests
+    # Generic argv test source skips when not Hexagon
+    test(t1 + target,
+         executable(t1 + target,
+                    [t1_src, 'lock-valid.c'],
+                    c_args: printf_compile_args_d + _c_args + ['-DEXPECT_PROG="test-argv"'],
+                    link_args: printf_link_args_d + _link_args,
+                    objects: _objs,
+                    link_depends:  _link_depends,
+                    include_directories: inc),
+         args: ['--args', 'hello world'],
+         depends: bios_bin,
+         suite: 'test',
+         env: test_env)
+
+    if no_flash_tests.contains(t1)
+      test(t1 + '-no-flash' + target,
+           executable(t1 + '-no-flash' + target,
+                      [t1_src, 'lock-valid.c'],
+                      c_args: printf_compile_args_d + _c_args + ['-DEXPECT_PROG="test-argv-no-flash"'],
+                      link_args: printf_link_args_d + _link_args_no_flash,
+                      objects: _objs_no_flash,
+                      link_depends:  _link_depends_no_flash,
+                      include_directories: inc),
+           args: ['--args', 'hello world'],
+           depends: bios_bin,
+           suite: 'test-no-flash',
+           env: test_env)
+    endif
+  endif
 
   if have_cplusplus
     t1 = 'test-cplusplus'
     t1_src = t1 + '.cpp'
-    test(t1 + target,
-         executable(t1 + target, t1_src,
-                    cpp_args: _cpp_args,
-		    link_args: _cpp_args + _link_args,
-		    objects: _objs,
-		    link_depends:  _link_depends,
-                    include_directories: inc),
-         depends: bios_bin,
-         suite: 'test',
-         env: test_env)
+    if allowed_tests.length() == 0 or t1 in allowed_tests
+      test(t1 + target,
+           executable(t1 + target, t1_src,
+                      cpp_args: _cpp_args,
+		      link_args: _cpp_args + _link_args,
+		      objects: _objs,
+		      link_depends:  _link_depends,
+                      include_directories: inc),
+           depends: bios_bin,
+           suite: 'test',
+           env: test_env)
+      if no_flash_tests.contains(t1)
+        test(t1 + '-no-flash' + target,
+             executable(t1 + '-no-flash' + target, t1_src,
+                        cpp_args: _cpp_args,
+                        link_args: _cpp_args + _link_args_no_flash,
+                        objects: _objs_no_flash,
+                        link_depends:  _link_depends_no_flash,
+                        include_directories: inc),
+             depends: bios_bin,
+             suite: 'test-no-flash',
+             env: test_env)
+      endif
+    endif
   endif
 endforeach
 
-if enable_native_math_tests
+if enable_native_math_tests or enable_native_tests
+  native_lib_m = cc.find_library('m', required: true)
+endif
 
-  native_lib_m = cc.find_library('m', required: false)
+if enable_native_math_tests
 
   if native_lib_m.found()
     test('long_double-native',
 	 executable('long_double-native', 'long_double.c',
 		    c_args: native_c_args,
 		    link_args: native_c_args,
-		    dependencies: native_lib_m))
+		    dependencies: native_lib_m),
+        suite: 'test-math')
     test('math_errhandling-native',
 	 executable('math_errhandling-native', 'math_errhandling.c',
 		    c_args: native_c_args,
 		    link_args: native_c_args,
-		    dependencies: native_lib_m))
+		    dependencies: native_lib_m),
+        suite: 'test-math')
     test('rounding-mode-native',
 	 executable('rounding-mode-native',
 		    ['rounding-mode.c', 'rounding-mode-sub.c'],
 		    c_args: native_c_args,
 		    link_args: native_c_args,
-		    dependencies: native_lib_m))
-    test('printf-tests-native',
-	 executable('printf-tests-native',
-		    'printf-tests.c',
-		    c_args: native_c_args,
-		    link_args: native_c_args,
-		    dependencies: native_lib_m))
-    test('printf_scanf-native',
-	 executable('printf_scanf-native',
-		    'printf_scanf.c',
-		    c_args: native_c_args,
-		    link_args: native_c_args,
-		    dependencies: native_lib_m))
-
+		    dependencies: native_lib_m),
+        suite: 'test-math')
     foreach t1 : math_tests_native
       t1_src = t1 + '.c'
 
@@ -644,7 +632,8 @@ if enable_native_math_tests
 	   executable(t1 + '-native', t1_src,
 		      c_args: native_c_args,
 		      link_args: native_c_args,
-                      dependencies: native_lib_m))
+                      dependencies: native_lib_m),
+          suite: 'test-math')
     endforeach
 
   endif
@@ -654,94 +643,17 @@ endif
 
 if enable_native_tests
 
-  localedef = find_program('localedef', required: false)
-
-  ctype_c_args = []
-
-  locales=[]
-  # need meson 0.57 so we can use 'env' in custom_target
-  if localedef.found() and meson.version().version_compare('>=0.57')
-    if mb_capable
-      locale = 'fr_FR.UTF-8'
-      locales += [custom_target(locale, output: locale,
-                                command: [localedef, '--no-warnings=ascii',
-                                          '-f', 'UTF-8', '-i', 'fr_FR', '.' / '@OUTPUT@'])]
-      locale = 'C.UTF-8'
-      locales += [custom_target(locale, output: locale,
-                                command: [localedef, '--no-warnings=ascii',
-                                          '-f', 'UTF-8', '-i', 'C', '.' / '@OUTPUT@'])]
-      ctype_c_args += ['-DHAVE_UTF_CHARSETS']
-    endif
-    if mb_extended_charsets
-      # CP720 doesn't have any Linux support.
-      # JIS doesn't make any sense to me.
-      # CP1255 and CP1258 seem to be broken in Linux
-      foreach ctype : ['ISO-8859-1', 'ISO-8859-2', 'ISO-8859-3', 'ISO-8859-4',
-                       'ISO-8859-5', 'ISO-8859-6', 'ISO-8859-7', 'ISO-8859-8',
-                       'ISO-8859-9', 'ISO-8859-10', 'ISO-8859-11', 'ISO-8859-13',
-                       'ISO-8859-14', 'ISO-8859-15', 'ISO-8859-16',
-
-                       'GEORGIAN-PS', 'PT154', 'KOI8-T', 'CP437', 'CP737', 'CP775',
-                       'CP850', 'CP852', 'CP855', 'CP857', 'CP858', 'CP862', 'CP866',
-                       'CP874', 'CP1125', 'CP1250', 'CP1251', 'CP1252', 'CP1253',
-                       'CP1254', 'CP1256', 'CP1257', 'KOI8-R', 'KOI8-U',
-
-                       'SHIFT-JIS', 'EUC-JP']
-        locale = 'C.' + ctype
-        if ctype == 'SHIFT-JIS'
-          ctype = 'SHIFT_JIS'
-        elif ctype == 'CP437'
-          ctype = 'IBM437'
-        elif ctype == 'CP850'
-          ctype = 'IBM850'
-        elif ctype == 'CP852'
-          ctype = 'IBM852'
-        elif ctype == 'CP855'
-          ctype = 'IBM855'
-        elif ctype == 'CP857'
-          ctype = 'IBM857'
-        elif ctype == 'CP858'
-          ctype = 'IBM858'
-        elif ctype == 'CP862'
-          ctype = 'IBM862'
-        elif ctype == 'CP866'
-          ctype = 'IBM866'
-        elif ctype == 'CP874'
-          ctype = 'IBM874'
-        endif
-        locales += [custom_target(locale, output: locale,
-                                  command: [localedef, '--no-warnings=ascii',
-                                            '-f', ctype, '-i', 'C', '.' / '@OUTPUT@'])]
-      endforeach
-      ctype_c_args += ['-DHAVE_ISO_CHARSETS',
-                       '-DHAVE_WINDOWS_CHARSETS',
-                       '-DHAVE_JIS_CHARSETS'
-                      ]
-    endif
-  endif
-
   native_lib = static_library('native-lib',
                               ['native-locks.c'],
                               c_args: native_c_args)
-
-  test_file_name_arg=['-DTEST_FILE_NAME="' + 'test-flockfile' + '.txt"']
-
-  test('test-flockfile',
-       executable('test-flockfile',
-                  'test-flockfile.c',
-                  c_args: test_c_args + test_file_name_arg,
-                  link_args: test_link_args,
-                  link_whole: [native_lib],
-                  link_with: [lib_c],
-                  include_directories: inc),
-       depends: bios_bin,
-       env: test_env)
 
   if have_cplusplus
     test('test-cplusplus-native',
          executable('test-cplusplus-native', 'test-cplusplus.cpp',
                     cpp_args: native_cpp_args,
-		    link_args: native_cpp_args))
+		    link_args: native_cpp_args),
+         suite: 'test'
+        )
   endif
 
   foreach t1 : plain_tests_native
@@ -751,56 +663,21 @@ if enable_native_tests
 
     test(t1_name,
 	 executable(t1_name, t1_src,
-		    c_args: native_c_args + ctype_c_args,
+		    c_args: native_c_args,
 		    link_args: native_c_args),
-         env: ['LOCPATH=' + meson.current_build_dir()])
+         suite: 'test'
+        )
   endforeach
-
-  diff = find_program('diff', required: false)
-
-  if diff.found()
-    diff_tests = ['test-wctype', 'test-encode', 'test-wcase']
-
-    foreach t : diff_tests
-      src = t + '.c'
-      n = t + '-native'
-      o = t + '-out'
-      no = n + '-out'
-
-      test = t + '-compare'
-
-      e = executable(t, src, 
-                 c_args: printf_compile_args_d + _c_args + ctype_c_args,
-                 link_args: printf_link_args_d + _link_args,
-                 objects: _objs,
-                 link_depends: _link_depends,
-                 include_directories: inc)
-
-      out = custom_target (o, output: o,
-                           command: [e, '@OUTPUT@'])
-
-      ne = executable(n, src, 
-                      c_args: native_c_args + ctype_c_args,
-                      link_args: native_c_args)
-
-      if locales != [] and meson.version().version_compare('>=0.57')
-        native_out = custom_target (no, output: no,
-                                    depends: locales,
-                                    env: ['LOCPATH=' + meson.current_build_dir()],
-                                    command: [ne, '@OUTPUT@'])
-      else
-        native_out = custom_target (no, output: no,
-                                    command: [ne, '@OUTPUT@'])
-      endif
-
-      test(test, diff, args: ['-u', out, native_out])
-    endforeach
-  endif
 endif
 
 subdir('libc-testsuite')
+subdir('test-ctype')
+subdir('test-iconv')
 subdir('test-math')
 subdir('test-string')
+subdir('test-monetary')
+subdir('test-stdio')
+subdir('testsuite')
 
 if has_arm_semihost
   subdir('semihost')

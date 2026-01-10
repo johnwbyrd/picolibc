@@ -143,6 +143,11 @@ foreach params : targets
   _link_args = target_c_args + _lib_files + get_variable('test_link_args' + target, test_link_args)
   _link_depends = get_variable('test_link_depends' + target, test_link_depends) + _libs
   foreach t1 : tests
+    # Skip tests not in allowed_tests (when allowed_tests is set)
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
+
     t1_src = t1 + '.c'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1 + target + '.txt"']
 
@@ -168,6 +173,11 @@ foreach params : targets
   endforeach
 
   foreach t1 : tests_failure
+    # Skip tests not in allowed_tests (when allowed_tests is set)
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
+
     t1_src = t1 + '.c'
     t1 += '-failure'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1 + target + '.txt"']
@@ -199,6 +209,11 @@ foreach params : targets
     _printf_link_args = printf_type['link_args'] + _link_args
     _ext = printf_type['ext']
     foreach test : tests_printf
+      # Skip tests not in allowed_tests (when allowed_tests is set)
+      if allowed_tests.length() > 0 and not (test in allowed_tests)
+        continue
+      endif
+
       test_src = test + '.c'
       test_file_name_arg=['-DTEST_FILE_NAME="' + test + _ext + target + '.txt"']
 
