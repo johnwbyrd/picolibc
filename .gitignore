@@ -45,3 +45,6 @@ lost+found
 # ignore meson build directories
 
 build-*/
+
+# ignore clangd
+.cache/
