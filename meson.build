@@ -1097,6 +1097,9 @@ foreach params : [default_target] + targets
     # non-exec mode for ram PHDR
     picolibc_ld_data.set('RAM_MODE', 'w!rx')
 
+    # flash region alias points to rom for regular builds
+    picolibc_ld_data.set('FLASH_REGION', 'rom')
+
     # attributes for regular executable sections
     picolibc_ld_data.set('TEXT_MEM', 'flash')
     picolibc_ld_data.set('TEXT_AT', 'flash')
@@ -1275,17 +1278,17 @@ foreach params : [default_target] + targets
                                                   meson.get_cross_property(
                                                     'default_alignment', fallback_alignment))
 
-    picolibc_linker_type_data.set('EXTRA_TEXT_SECTIONS',
+    picolibc_ld_data.set('EXTRA_TEXT_SECTIONS',
                                   meson.get_cross_property('extra_text_sections', ''))
-    picolibc_linker_type_data.set('EXTRA_RODATA_SECTIONS',
+    picolibc_ld_data.set('EXTRA_RODATA_SECTIONS',
                                   meson.get_cross_property('extra_rodata_sections', ''))
-    picolibc_linker_type_data.set('EXTRA_DATA_SECTIONS',
+    picolibc_ld_data.set('EXTRA_DATA_SECTIONS',
                                   meson.get_cross_property('extra_data_sections', ''))
-    picolibc_linker_type_data.set('EXTRA_SDATA_SECTIONS',
+    picolibc_ld_data.set('EXTRA_SDATA_SECTIONS',
                                   meson.get_cross_property('extra_sdata_sections', ''))
-    picolibc_linker_type_data.set('EXTRA_BSS_SECTIONS',
+    picolibc_ld_data.set('EXTRA_BSS_SECTIONS',
                                   meson.get_cross_property('extra_bss_sections', ''))
-    picolibc_linker_type_data.set('EXTRA_SBSS_SECTIONS',
+    picolibc_ld_data.set('EXTRA_SBSS_SECTIONS',
                                   meson.get_cross_property('extra_sbss_sections', ''))
 
     # Helper to resolve INCLUDE directives in linker properties
@@ -1294,19 +1297,19 @@ foreach params : [default_target] + targets
     if linker_preamble.startswith('INCLUDE ')
       linker_preamble = fs.read(linker_preamble.split(' ')[1].strip())
     endif
-    picolibc_linker_type_data.set('LINKER_PREAMBLE', linker_preamble)
+    picolibc_ld_data.set('LINKER_PREAMBLE', linker_preamble)
 
     extra_memory = meson.get_cross_property('extra_memory', '')
     if extra_memory.startswith('INCLUDE ')
       extra_memory = fs.read(extra_memory.split(' ')[1].strip())
     endif
-    picolibc_linker_type_data.set('EXTRA_MEMORY', extra_memory)
+    picolibc_ld_data.set('EXTRA_MEMORY', extra_memory)
 
     extra_sections = meson.get_cross_property('extra_sections', '')
     if extra_sections.startswith('INCLUDE ')
       extra_sections = fs.read(extra_sections.split(' ')[1].strip())
     endif
-    picolibc_linker_type_data.set('EXTRA_SECTIONS', extra_sections)
+    picolibc_ld_data.set('EXTRA_SECTIONS', extra_sections)
 
     _default_noflash_flash_addr = meson.get_cross_property(
       'default_noflash_flash_addr_' + custom_mem_config,
@@ -1419,6 +1422,9 @@ foreach params : [default_target] + targets
 
     # mark the ram section rwx
     picolibc_noflash_ld_data.set('RAM_MODE', 'rwx')
+
+    # flash region alias points to ram for noflash builds
+    picolibc_noflash_ld_data.set('FLASH_REGION', 'ram')
 
     # set up default memory layout
     picolibc_noflash_ld_data.set('DEFAULT_FLASH_ADDR', _default_noflash_flash_addr)
@@ -1796,8 +1802,11 @@ test_env = environment({'PICOLIBC_TEST' : '1'})
 test_env.prepend('PATH', meson.current_source_dir() / 'scripts')
 
 if has_semihost
+  # RAM-only targets (like MOS 6502) should use the noflash linker script
+  ram_only = meson.get_cross_property('ram_only', false)
+
   foreach params : [default_target] + targets
-    
+
     target = params['name']
     target_dir = params['dir']
     target_c_args = params['c_args']
@@ -1807,7 +1816,7 @@ if has_semihost
       test_linker_files_variable = 'test_linker_files'
       test_link_depends_variable = 'test_link_depends'
       test_link_depends_noflash_variable = 'test_link_depends_noflash'
-      picolibc_ld_value = picolibc_ld
+      picolibc_ld_value = ram_only ? picolibc_noflash_ld : picolibc_ld
 
       if thread_local_storage
         test_inittls_link_args_variable = 'test_inittls_link_args'
@@ -1822,7 +1831,11 @@ if has_semihost
       test_linker_files_variable = 'test_linker_files_' + target
       test_link_depends_variable = 'test_link_depends' + target
       test_link_depends_noflash_variable = 'test_link_depends_noflash' + target
-      picolibc_ld_value = get_variable('picolibc' + target + '_ld', picolibc_ld)
+      if ram_only
+        picolibc_ld_value = get_variable('picolibc' + target + '_noflash_ld', picolibc_noflash_ld)
+      else
+        picolibc_ld_value = get_variable('picolibc' + target + '_ld', picolibc_ld)
+      endif
 
       if thread_local_storage
         test_inittls_link_args_variable = 'test_inittls_link_args' + target
