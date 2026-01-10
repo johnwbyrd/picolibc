@@ -53,11 +53,11 @@ MEMORY
 @EXTRA_MEMORY@}
 
 /*
- * Alias flash to rom if flash exists, otherwise alias to ram.
- * This allows RAM-only systems (like Commodore 64) to set __flash_size = 0
- * and have all sections automatically placed in RAM.
+ * Alias flash to the appropriate memory region.
+ * For regular builds, flash points to rom.
+ * For noflash builds (RAM-only systems), flash points to ram.
  */
-REGION_ALIAS("flash", (DEFINED(@PREFIX@__flash_size) && @PREFIX@__flash_size > 0) ? rom : ram);
+REGION_ALIAS("flash", @FLASH_REGION@);
 
 PHDRS
 {@INIT_PHDRS@
@@ -369,6 +369,7 @@ SECTIONS
 		. = ALIGN(@DEFAULT_ALIGNMENT@);
 		@PREFIX@__bss_end = .;
 		@PREFIX@_end = .;
+		@PREFIX@__end = .;
 	} >ram AT>ram :ram
 
 @DATATLS@	PROVIDE( @PREFIX@__tls_space_size = @PREFIX@__tls_end - @PREFIX@__tls_start );
