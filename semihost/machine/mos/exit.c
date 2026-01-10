@@ -17,14 +17,14 @@
 __noreturn void
 _exit(int code)
 {
-	if (sys_semihost_feature(SH_EXT_EXIT_EXTENDED)) {
-		sys_semihost_exit_extended(code);
-	} else {
-		/*
-		 * For ZBC on MOS, we just pass the exit code directly.
-		 * The ARM ADP_Stopped_* constants don't fit in 16 bits
-		 * and ZBC doesn't require them.
-		 */
-		sys_semihost_exit((uintptr_t)code, code);
-	}
+    if (sys_semihost_feature(SH_EXT_EXIT_EXTENDED)) {
+        sys_semihost_exit_extended(code);
+    } else {
+        /*
+         * For ZBC on MOS, we just pass the exit code directly.
+         * The ARM ADP_Stopped_* constants don't fit in 16 bits
+         * and ZBC doesn't require them.
+         */
+        sys_semihost_exit((uintptr_t)code, code);
+    }
 }

@@ -12,10 +12,10 @@
 /* Function prototypes */
 unsigned int __udivhi3(unsigned int a, unsigned int b);
 unsigned int __umodhi3(unsigned int a, unsigned int b);
-int __divhi3(int a, int b);
-int __modhi3(int a, int b);
+int          __divhi3(int a, int b);
+int          __modhi3(int a, int b);
 unsigned int __udivmodhi4(unsigned int a, unsigned int b, unsigned int *rem);
-int __divmodhi4(int a, int b, int *rem);
+int          __divmodhi4(int a, int b, int *rem);
 
 /* Helper: unsigned 16-bit division */
 static unsigned int

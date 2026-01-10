@@ -39,9 +39,9 @@ extern int    _malloc_test_fail;
  * When TEST_FUNC is defined (e.g., -DTEST_FUNC=sinf), only that
  * one test function is called, keeping the executable small.
  */
-#define _TEST_FUNC_CONCAT(a, b) a ## b
-#define _TEST_FUNC_EXPAND(x) _TEST_FUNC_CONCAT(test_, x)
-#define _TEST_FUNC_NAME _TEST_FUNC_EXPAND(TEST_FUNC)
+#define _TEST_FUNC_CONCAT(a, b) a##b
+#define _TEST_FUNC_EXPAND(x)    _TEST_FUNC_CONCAT(test_, x)
+#define _TEST_FUNC_NAME         _TEST_FUNC_EXPAND(TEST_FUNC)
 
 int
 main(int ac, char **av)

@@ -12,10 +12,10 @@
 /* Function prototypes */
 unsigned char __udivqi3(unsigned char a, unsigned char b);
 unsigned char __umodqi3(unsigned char a, unsigned char b);
-signed char __divqi3(signed char a, signed char b);
-signed char __modqi3(signed char a, signed char b);
+signed char   __divqi3(signed char a, signed char b);
+signed char   __modqi3(signed char a, signed char b);
 unsigned char __udivmodqi4(unsigned char a, unsigned char b, unsigned char *rem);
-signed char __divmodqi4(signed char a, signed char b, signed char *rem);
+signed char   __divmodqi4(signed char a, signed char b, signed char *rem);
 
 /* Helper: unsigned 8-bit division */
 static unsigned char

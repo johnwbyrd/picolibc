@@ -12,10 +12,10 @@
 /* Function prototypes */
 unsigned long __udivsi3(unsigned long a, unsigned long b);
 unsigned long __umodsi3(unsigned long a, unsigned long b);
-long __divsi3(long a, long b);
-long __modsi3(long a, long b);
+long          __divsi3(long a, long b);
+long          __modsi3(long a, long b);
 unsigned long __udivmodsi4(unsigned long a, unsigned long b, unsigned long *rem);
-long __divmodsi4(long a, long b, long *rem);
+long          __divmodsi4(long a, long b, long *rem);
 
 /* Helper: unsigned division */
 static unsigned long

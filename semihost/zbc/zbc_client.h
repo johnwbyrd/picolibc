@@ -45,13 +45,13 @@ extern "C" {
  * Initialize with zbc_client_init() before use.
  */
 typedef struct {
-    volatile uint8_t *dev_base;  /**< Pointer to device registers */
-    uint8_t cnfg_sent;           /**< 1 if CNFG chunk has been sent */
-    uint8_t int_size;            /**< sizeof(int) on this platform */
-    uint8_t ptr_size;            /**< sizeof(void*) on this platform */
-    uint8_t endianness;          /**< ZBC_ENDIAN_LITTLE or ZBC_ENDIAN_BIG */
-    void (*doorbell_callback)(void *);  /**< For testing */
-    void *doorbell_ctx;          /**< Context for doorbell callback */
+    volatile uint8_t *dev_base;                     /**< Pointer to device registers */
+    uint8_t           cnfg_sent;                    /**< 1 if CNFG chunk has been sent */
+    uint8_t           int_size;                     /**< sizeof(int) on this platform */
+    uint8_t           ptr_size;                     /**< sizeof(void*) on this platform */
+    uint8_t           endianness;                   /**< ZBC_ENDIAN_LITTLE or ZBC_ENDIAN_BIG */
+    void              (*doorbell_callback)(void *); /**< For testing */
+    void             *doorbell_ctx;                 /**< Context for doorbell callback */
 } zbc_client_state_t;
 
 /**
@@ -60,12 +60,12 @@ typedef struct {
  * Populated by zbc_call() and zbc_parse_response().
  */
 typedef struct {
-    int result;           /**< Syscall return value */
-    int error_code;       /**< Errno value from host */
-    const uint8_t *data;  /**< Pointer to DATA payload (if any) */
-    size_t data_size;     /**< Size of DATA payload */
-    int is_error;         /**< 1 if ERRO chunk received */
-    int proto_error;      /**< Protocol error code from ERRO */
+    int            result;      /**< Syscall return value */
+    int            error_code;  /**< Errno value from host */
+    const uint8_t *data;        /**< Pointer to DATA payload (if any) */
+    size_t         data_size;   /**< Size of DATA payload */
+    int            is_error;    /**< 1 if ERRO chunk received */
+    int            proto_error; /**< Protocol error code from ERRO */
 } zbc_response_t;
 
 /*========================================================================
@@ -81,7 +81,7 @@ typedef struct {
  * @param state    Client state structure to initialize
  * @param dev_base Memory-mapped device base address
  */
-void zbc_client_init(zbc_client_state_t *state, volatile void *dev_base);
+void      zbc_client_init(zbc_client_state_t *state, volatile void *dev_base);
 
 /**
  * Check if a semihosting device is present by reading the signature.
@@ -93,7 +93,7 @@ void zbc_client_init(zbc_client_state_t *state, volatile void *dev_base);
  *         ZBC_ERR_NULL_ARG if state or dev_base is NULL,
  *         ZBC_ERR_DEVICE_ERROR if signature mismatch
  */
-int zbc_client_check_signature(const zbc_client_state_t *state);
+int       zbc_client_check_signature(const zbc_client_state_t *state);
 
 /**
  * Reset the CNFG sent flag, forcing resend on next call.
@@ -103,7 +103,7 @@ int zbc_client_check_signature(const zbc_client_state_t *state);
  *
  * @param state Initialized client state
  */
-void zbc_client_reset_cnfg(zbc_client_state_t *state);
+void      zbc_client_reset_cnfg(zbc_client_state_t *state);
 
 /**
  * Execute a semihosting syscall.
@@ -124,8 +124,8 @@ void zbc_client_reset_cnfg(zbc_client_state_t *state);
  * @param args           Array of arguments (layout depends on opcode), may be NULL
  * @return ZBC_OK on success, ZBC_ERR_* on protocol/transport error
  */
-int zbc_call(zbc_response_t *response, zbc_client_state_t *state,
-             void *buf, size_t buf_size, int opcode, uintptr_t *args);
+int       zbc_call(zbc_response_t *response, zbc_client_state_t *state, void *buf, size_t buf_size,
+                   int opcode, uintptr_t *args);
 
 /**
  * ARM-compatible semihost entry point.
@@ -142,8 +142,8 @@ int zbc_call(zbc_response_t *response, zbc_client_state_t *state,
  * @param param         Pointer to args array (cast from uintptr_t*)
  * @return Syscall result, or (uintptr_t)-1 on error
  */
-uintptr_t zbc_semihost(zbc_client_state_t *state, uint8_t *riff_buf,
-                       size_t riff_buf_size, uintptr_t op, uintptr_t param);
+uintptr_t zbc_semihost(zbc_client_state_t *state, uint8_t *riff_buf, size_t riff_buf_size,
+                       uintptr_t op, uintptr_t param);
 
 /**
  * Submit a RIFF request to the semihosting device.
@@ -158,7 +158,7 @@ uintptr_t zbc_semihost(zbc_client_state_t *state, uint8_t *riff_buf,
  * @param size  Size of request data
  * @return ZBC_OK on success, error code on failure
  */
-int zbc_client_submit(zbc_client_state_t *state, void *buf, size_t size);
+int       zbc_client_submit(zbc_client_state_t *state, void *buf, size_t size);
 
 /**
  * Parse response from RIFF buffer.
@@ -172,8 +172,8 @@ int zbc_client_submit(zbc_client_state_t *state, void *buf, size_t size);
  * @param state         Client state (for int_size/endianness)
  * @return ZBC_OK on success, ZBC_ERR_PARSE_ERROR on failure
  */
-int zbc_parse_response(zbc_response_t *response, const uint8_t *buf,
-                       size_t capacity, const zbc_client_state_t *state);
+int       zbc_parse_response(zbc_response_t *response, const uint8_t *buf, size_t capacity,
+                             const zbc_client_state_t *state);
 
 #ifdef __cplusplus
 }

@@ -60,17 +60,18 @@ uintptr_t sys_semihost(uintptr_t op, uintptr_t param);
  *   32-bit: 0xFFFEFDE0
  *   64-bit: 0xFFFFFFFEFFFFFDE0
  */
-static volatile uint8_t *zbc_get_device_base(void)
+static volatile uint8_t *
+zbc_get_device_base(void)
 {
     const unsigned int addr_bits = sizeof(void *) * 8;
     const unsigned int half_bits = addr_bits / 2;
-    const uintptr_t reserved_start = ~(uintptr_t)0 - ((uintptr_t)1 << half_bits) + 1;
+    const uintptr_t    reserved_start = ~(uintptr_t)0 - ((uintptr_t)1 << half_bits) + 1;
     return (volatile uint8_t *)(reserved_start - 512 - 32);
 }
 
 /* Static client state - initialized on first call */
 static zbc_client_state_t zbc_state;
-static int zbc_initialized = 0;
+static int                zbc_initialized = 0;
 
 /* Static RIFF buffer for requests/responses */
 #define ZBC_RIFF_BUF_SIZE 512
@@ -79,7 +80,8 @@ static uint8_t zbc_riff_buf[ZBC_RIFF_BUF_SIZE];
 /*
  * Initialize ZBC client on first use.
  */
-static void zbc_init_once(void)
+static void
+zbc_init_once(void)
 {
     if (!zbc_initialized) {
         zbc_client_init(&zbc_state, zbc_get_device_base());

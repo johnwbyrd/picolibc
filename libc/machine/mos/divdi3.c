@@ -12,10 +12,11 @@
 /* Function prototypes */
 unsigned long long __udivdi3(unsigned long long a, unsigned long long b);
 unsigned long long __umoddi3(unsigned long long a, unsigned long long b);
-unsigned long long __udivmoddi4(unsigned long long a, unsigned long long b, unsigned long long *rem);
-long long __divdi3(long long a, long long b);
-long long __moddi3(long long a, long long b);
-long long __divmoddi4(long long a, long long b, long long *rem);
+unsigned long long __udivmoddi4(unsigned long long a, unsigned long long b,
+                                unsigned long long *rem);
+long long          __divdi3(long long a, long long b);
+long long          __moddi3(long long a, long long b);
+long long          __divmoddi4(long long a, long long b, long long *rem);
 
 /* Helper: unsigned 64-bit division */
 static unsigned long long

@@ -15,7 +15,7 @@
 #ifndef _MACHINE_SETJMP_H_
 #define _MACHINE_SETJMP_H_
 
-#define _JBLEN 19
+#define _JBLEN  19
 #define _JBTYPE unsigned char
 
 typedef _JBTYPE jmp_buf[_JBLEN];
