@@ -1,0 +1,198 @@
+name: llvm-mos
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build-mos-toolchain:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          ninja-build \
+          python3-pip \
+          build-essential \
+          git \
+          zip
+        pip3 install meson
+
+        # Verify installations
+        cmake --version
+        ninja --version
+        meson --version
+        python3 --version
+
+    - name: Clone and build llvm-mos
+      run: |
+        echo "::group::Clone llvm-mos"
+        git clone https://github.com/llvm-mos/llvm-mos.git
+        cd llvm-mos
+        LLVM_MOS_COMMIT=$(git rev-parse --short HEAD)
+        echo "llvm-mos commit: $LLVM_MOS_COMMIT"
+        echo "LLVM_MOS_COMMIT=$LLVM_MOS_COMMIT" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+        echo "::group::Configure llvm-mos"
+        cmake -C clang/cmake/caches/MOS.cmake \
+          -G Ninja \
+          -S llvm \
+          -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/llvm-mos-install
+        echo "::endgroup::"
+
+        echo "::group::Build llvm-mos"
+        cmake --build build --target distribution
+        echo "::endgroup::"
+
+        echo "::group::Install llvm-mos"
+        cmake --install build
+        echo "::endgroup::"
+
+        # Verify installation
+        ls -la ${{ github.workspace }}/llvm-mos-install/bin/
+        ${{ github.workspace }}/llvm-mos-install/bin/mos-clang --version
+
+    - name: Checkout picolibc
+      uses: actions/checkout@v4
+      with:
+        path: picolibc
+
+    - name: Build picolibc for MOS
+      run: |
+        # Set up environment variables
+        export PATH="${{ github.workspace }}/llvm-mos-install/bin:$PATH"
+        export LLVM_MOS="${{ github.workspace }}/llvm-mos-install"
+        export PICOLIBC_MOS_PREFIX="${{ github.workspace }}/picolibc-install"
+
+        echo "::group::Environment verification"
+        echo "PATH: $PATH"
+        echo "LLVM_MOS: $LLVM_MOS"
+        echo "PICOLIBC_MOS_PREFIX: $PICOLIBC_MOS_PREFIX"
+        which mos-clang
+        mos-clang --version
+        echo "::endgroup::"
+
+        echo "::group::Configure picolibc"
+        cd picolibc
+        PICOLIBC_COMMIT=$(git rev-parse --short HEAD)
+        echo "picolibc commit: $PICOLIBC_COMMIT"
+        echo "PICOLIBC_COMMIT=$PICOLIBC_COMMIT" >> $GITHUB_ENV
+        mkdir -p build
+        cd build
+        ../scripts/do-mos-configure .
+        echo "::endgroup::"
+
+        echo "::group::Build picolibc"
+        ninja
+        echo "::endgroup::"
+
+        echo "::group::Install picolibc"
+        ninja install
+        echo "::endgroup::"
+
+        # Verify picolibc installation
+        echo "::group::Verify picolibc installation"
+        ls -la ${{ github.workspace }}/picolibc-install/
+        if [ -d "${{ github.workspace }}/picolibc-install/lib" ]; then
+          ls -la ${{ github.workspace }}/picolibc-install/lib/ | head -20
+        fi
+        if [ -d "${{ github.workspace }}/picolibc-install/include" ]; then
+          ls -la ${{ github.workspace }}/picolibc-install/include/ | head -20
+        fi
+        echo "::endgroup::"
+
+    - name: Package LLVM-MOS
+      run: |
+        cd ${{ github.workspace }}
+
+        BUILD_DATE=$(date +%Y%m%d)
+        LLVM_MOS_NAME="llvm-mos-linux-x86_64-${BUILD_DATE}-${{ env.LLVM_MOS_COMMIT }}"
+
+        echo "::group::Create LLVM-MOS package"
+        mkdir -p $LLVM_MOS_NAME
+        cp -r llvm-mos-install/* $LLVM_MOS_NAME/
+
+        echo "::endgroup::"
+
+        echo "::group::Create LLVM-MOS archive"
+        zip -r ${LLVM_MOS_NAME}.zip $LLVM_MOS_NAME
+        ls -lh ${LLVM_MOS_NAME}.zip
+        echo "LLVM-MOS archive size: $(du -h ${LLVM_MOS_NAME}.zip | cut -f1)"
+        echo "::endgroup::"
+
+        echo "LLVM_MOS_ARCHIVE=${LLVM_MOS_NAME}.zip" >> $GITHUB_ENV
+        echo "LLVM_MOS_NAME=${LLVM_MOS_NAME}" >> $GITHUB_ENV
+
+    - name: Package Picolibc
+      run: |
+        cd ${{ github.workspace }}
+
+        BUILD_DATE=$(date +%Y%m%d)
+        PICOLIBC_NAME="picolibc-mos-${BUILD_DATE}-${{ env.PICOLIBC_COMMIT }}"
+
+        echo "::group::Create Picolibc package"
+        mkdir -p $PICOLIBC_NAME
+        cp -r picolibc-install/* $PICOLIBC_NAME/
+
+        echo "::endgroup::"
+
+        echo "::group::Create Picolibc archive"
+        zip -r ${PICOLIBC_NAME}.zip $PICOLIBC_NAME
+        ls -lh ${PICOLIBC_NAME}.zip
+        echo "Picolibc archive size: $(du -h ${PICOLIBC_NAME}.zip | cut -f1)"
+        echo "::endgroup::"
+
+        echo "PICOLIBC_ARCHIVE=${PICOLIBC_NAME}.zip" >> $GITHUB_ENV
+        echo "PICOLIBC_NAME=${PICOLIBC_NAME}" >> $GITHUB_ENV
+
+    - name: Upload LLVM-MOS artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.LLVM_MOS_NAME }}
+        path: ${{ env.LLVM_MOS_ARCHIVE }}
+        retention-days: 90
+        if-no-files-found: error
+
+    - name: Upload Picolibc artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.PICOLIBC_NAME }}
+        path: ${{ env.PICOLIBC_ARCHIVE }}
+        retention-days: 90
+        if-no-files-found: error
+
+    - name: Create build summary
+      run: |
+        cd ${{ github.workspace }}
+
+        echo "## MOS Toolchain Build Complete" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Two separate packages have been built:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### LLVM-MOS Compiler" >> $GITHUB_STEP_SUMMARY
+        echo "**Archive:** \`${{ env.LLVM_MOS_ARCHIVE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Size:** $(du -h ${{ env.LLVM_MOS_ARCHIVE }} | cut -f1)" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ env.LLVM_MOS_COMMIT }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Picolibc C Library" >> $GITHUB_STEP_SUMMARY
+        echo "**Archive:** \`${{ env.PICOLIBC_ARCHIVE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Size:** $(du -h ${{ env.PICOLIBC_ARCHIVE }} | cut -f1)" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ env.PICOLIBC_COMMIT }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Usage" >> $GITHUB_STEP_SUMMARY
+        echo "1. Download both artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "2. Extract both zip files" >> $GITHUB_STEP_SUMMARY
+        echo "3. Add llvm-mos bin/ to PATH" >> $GITHUB_STEP_SUMMARY
+        echo "4. Use --sysroot to point to picolibc directory" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Build Date:** $(date)" >> $GITHUB_STEP_SUMMARY
