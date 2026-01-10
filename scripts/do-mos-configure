@@ -33,4 +33,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-exec "$(dirname "$0")"/do-configure mos -Dc_args='-Wno-tautological-compare' "$@"
+if [ -n "$PICOLIBC_MOS_PREFIX" ]; then
+    exec "$(dirname "$0")"/do-configure mos -Dc_args='-Wno-tautological-compare' --prefix="$PICOLIBC_MOS_PREFIX" "$@"
+else
+    exec "$(dirname "$0")"/do-configure mos -Dc_args='-Wno-tautological-compare' "$@"
+fi

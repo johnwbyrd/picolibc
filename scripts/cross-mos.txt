@@ -3,10 +3,10 @@
 # so we have to add -nostdlib to the compiler configuration itself or
 # early compiler tests will fail. This can be removed when picolibc
 # requires at least version 0.54.2 of meson.
-c = ['mos-clang', '-nostdlib', '-D__COMPILING_MOS_LIBC__', 
+c = ['mos-clang', '-nostdlib', '-flto', '-D__COMPILING_MOS_LIBC__', 
      '-D__IEEE_LITTLE_ENDIAN', '-D_LDBL_EQ_DBL', '-Os',
      '-Wno-tautological-compare' ]
-cpp = ['mos-clang', '-nostdlib', '-D__COMPILING_MOS_LIBC__', 
+cpp = ['mos-clang', '-nostdlib', '-flto', '-D__COMPILING_MOS_LIBC__', 
      '-D__IEEE_LITTLE_ENDIAN', '-D_LDBL_EQ_DBL', '-Os',
      '-Wno-tautological-compare' ]
 ar = 'llvm-ar'
