@@ -17,8 +17,8 @@ PROVIDE(__nmi_handler = 0x0000);
 PROVIDE(__reset_handler = __do_init_stack);
 PROVIDE(__irq_handler = 0x0000);
 
-	.vectors (TYPE = SHT_PROGBITS) : {
+	.vectors : {
 		SHORT(__nmi_handler);
 		SHORT(__reset_handler);
 		SHORT(__irq_handler);
-	} > vectors AT> vectors :text
+	} > vectors

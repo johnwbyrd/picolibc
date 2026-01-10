@@ -34,6 +34,9 @@ has_link_defsym = true
 # The libgcc property is set by do-mos-configure via a supplementary cross file
 # using mos-clang --print-runtime-dir to find the library path dynamically
 
+# MOS 6502 has no separate flash - everything runs from RAM
+ram_only = true
+
 # ZBC memory layout for MOS 6502:
 # RAM: 0x0200 - 0xFCDF (before ZBC device at 0xFCE0)
 # Stack grows down from end of RAM
@@ -41,6 +44,10 @@ default_flash_addr = '0x0200'
 default_flash_size = '0xFAE0'
 default_ram_addr = '0x0200'
 default_ram_size = '0xFAE0'
+
+# MOS 6502 uses a software stack (not the hardware stack at $0100-$01FF)
+# Default to 1024 bytes - 4KB default is too large for 6502
+default_stack_size = '0x0400'
 
 # llvm-mos imaginary registers and linker script extensions
 # These are loaded from separate files for readability
