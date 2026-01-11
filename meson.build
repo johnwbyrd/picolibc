@@ -1097,9 +1097,6 @@ foreach params : [default_target] + targets
     # non-exec mode for ram PHDR
     picolibc_ld_data.set('RAM_MODE', 'w!rx')
 
-    # flash region alias points to rom for regular builds
-    picolibc_ld_data.set('FLASH_REGION', 'rom')
-
     # attributes for regular executable sections
     picolibc_ld_data.set('TEXT_MEM', 'flash')
     picolibc_ld_data.set('TEXT_AT', 'flash')
@@ -1423,8 +1420,11 @@ foreach params : [default_target] + targets
     # mark the ram section rwx
     picolibc_noflash_ld_data.set('RAM_MODE', 'rwx')
 
-    # flash region alias points to ram for noflash builds
-    picolibc_noflash_ld_data.set('FLASH_REGION', 'ram')
+    # fix .init section to use ram instead of flash for noflash builds
+    # (the default INIT_SECTIONS from picolibc_ld_data references 'flash')
+    init_section_name = meson.get_cross_property('init_section_name', 'init')
+    picolibc_noflash_ld_data.set('INIT_SECTIONS',
+      default_init_section_template.format(init_section_name, 'ram', 'ram'))
 
     # set up default memory layout
     picolibc_noflash_ld_data.set('DEFAULT_FLASH_ADDR', _default_noflash_flash_addr)

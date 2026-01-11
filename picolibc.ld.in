@@ -44,20 +44,13 @@ ENTRY(@PREFIX@_start)
 
 MEMORY
 {@INIT_MEMORY@
-	rom (rx!w) :
+	flash (rx!w) :
 		ORIGIN = DEFINED(@PREFIX@__flash) ? @PREFIX@__flash : @DEFAULT_FLASH_ADDR@,
 		LENGTH = DEFINED(@PREFIX@__flash_size) ? @PREFIX@__flash_size : @DEFAULT_FLASH_SIZE@
 	ram (@RAM_MODE@) :
 		ORIGIN = DEFINED(@PREFIX@__ram) ? @PREFIX@__ram : @DEFAULT_RAM_ADDR@,
 		LENGTH = DEFINED(@PREFIX@__ram_size) ? @PREFIX@__ram_size : @DEFAULT_RAM_SIZE@
 @EXTRA_MEMORY@}
-
-/*
- * Alias flash to the appropriate memory region.
- * For regular builds, flash points to rom.
- * For noflash builds (RAM-only systems), flash points to ram.
- */
-REGION_ALIAS("flash", @FLASH_REGION@);
 
 PHDRS
 {@INIT_PHDRS@
