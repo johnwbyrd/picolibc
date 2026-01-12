@@ -1420,13 +1420,14 @@ foreach params : [default_target] + targets
     # mark the ram section rwx
     picolibc_noflash_ld_data.set('RAM_MODE', 'rwx')
 
-    # fix .init section to use ram instead of flash for noflash builds
-    # (the default INIT_SECTIONS from picolibc_ld_data references 'flash')
-    # Use 'ram' for memory region but keep 'text' for PHDR to maintain
-    # correct executable permissions on ARM and other architectures
-    init_section_name = meson.get_cross_property('init_section_name', 'init')
-    picolibc_noflash_ld_data.set('INIT_SECTIONS',
-      default_init_section_template.format(init_section_name, 'ram', 'text'))
+    # For ram_only targets (like MOS 6502), flash and ram have the same address,
+    # so .init must go to ram to avoid section overlap. Other architectures
+    # keep the inherited INIT_SECTIONS which places .init in flash.
+    if meson.get_cross_property('ram_only', false)
+      init_section_name = meson.get_cross_property('init_section_name', 'init')
+      picolibc_noflash_ld_data.set('INIT_SECTIONS',
+        default_init_section_template.format(init_section_name, 'ram', 'text'))
+    endif
 
     # set up default memory layout
     picolibc_noflash_ld_data.set('DEFAULT_FLASH_ADDR', _default_noflash_flash_addr)
