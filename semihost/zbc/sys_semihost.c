@@ -116,5 +116,18 @@ sys_semihost(uintptr_t op, uintptr_t param)
         return zbc_semihost(&zbc_state, zbc_riff_buf, ZBC_RIFF_BUF_SIZE, op, (uintptr_t)args);
     }
 
+    /*
+     * SYS_EXIT on 16/32-bit targets passes the exit code directly as param,
+     * not as a pointer to an args array. We need to wrap it.
+     * (On 64-bit targets, sys_semihost2 is used instead which passes a proper
+     * args array with both reason and subcode.)
+     */
+    if (op == SH_SYS_EXIT) {
+        uintptr_t args[2];
+        args[0] = param;  /* reason (exit code) */
+        args[1] = param;  /* subcode (same as reason for simple exit) */
+        return zbc_semihost(&zbc_state, zbc_riff_buf, ZBC_RIFF_BUF_SIZE, op, (uintptr_t)args);
+    }
+
     return zbc_semihost(&zbc_state, zbc_riff_buf, ZBC_RIFF_BUF_SIZE, op, param);
 }

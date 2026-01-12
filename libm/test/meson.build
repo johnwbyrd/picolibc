@@ -177,10 +177,26 @@ endif
 # Skipped when allowed_tests is set (targets like MOS 6502 use per-function tests instead)
 if allowed_tests.length() == 0
 
+skip_math_test = meson.get_external_property('skip_math_test', [])
+
 foreach params : targets
   target = params['name']
   target_dir = params['dir']
   target_c_args = params['c_args']
+
+  # Skip tests matching skip_math_test property
+  if target.strip('_') in skip_math_test
+    continue
+  endif
+  skip = false
+  foreach part : target.split('_')
+    if part != '' and part in skip_math_test
+      skip = true
+    endif
+  endforeach
+  if skip
+    continue
+  endif
 
   _libs = [get_variable('lib_c' + target)]
   if is_variable('lib_semihost' + target)
