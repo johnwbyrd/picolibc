@@ -1422,9 +1422,11 @@ foreach params : [default_target] + targets
 
     # fix .init section to use ram instead of flash for noflash builds
     # (the default INIT_SECTIONS from picolibc_ld_data references 'flash')
+    # Use 'ram' for memory region but keep 'text' for PHDR to maintain
+    # correct executable permissions on ARM and other architectures
     init_section_name = meson.get_cross_property('init_section_name', 'init')
     picolibc_noflash_ld_data.set('INIT_SECTIONS',
-      default_init_section_template.format(init_section_name, 'ram', 'ram'))
+      default_init_section_template.format(init_section_name, 'ram', 'text'))
 
     # set up default memory layout
     picolibc_noflash_ld_data.set('DEFAULT_FLASH_ADDR', _default_noflash_flash_addr)
