@@ -22,7 +22,7 @@
 .section .init.100,"ax",@progbits
 __do_init_stack:
 	lda #mos16lo(__stack)
-	sta __rc0
+	sta mos8(__rc0)
 	lda #mos16hi(__stack)
-	sta __rc1
+	sta mos8(__rc1)
 	jmp _start
