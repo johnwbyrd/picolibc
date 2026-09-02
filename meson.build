@@ -456,11 +456,18 @@ endif
 # test_c_args       target test C code
 # test_cpp_args     target test C++ code
 
+global_link_args = []
+foreach ld : ['-Wl,--no-warn-rwx-segments', '-Wl,--no-fatal-warnings', '-Wl,-znoexecstack']
+  if cc.has_multi_link_arguments(link_test_args + [ld])
+    global_link_args += [ld]
+  endif
+endforeach
+
 # Get additional flags used for linking tests.
 
-test_link_args_base = runtime_lib
+test_link_args_base = runtime_lib + global_link_args
 
-test_link_args_extra = ['-Wl,--gc-sections', '-Wl,--no-warn-rwx-segments', '-Wl,--no-fatal-warnings']
+test_link_args_extra = ['-Wl,--gc-sections']
 
 if profile
   test_link_args_extra += ['-pg']

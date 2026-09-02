@@ -194,7 +194,7 @@ foreach params : targets
 
       _src = variant['src']
       _c_args = target_c_args + arg_fnobuiltin + ['-ffreestanding', '-DMACHINE_' + machine['name']] + variant['c_args']
-      _link_args = target_c_args + ['-r', '-ffreestanding']
+      _link_args = target_c_args + ['-r', '-ffreestanding'] + global_link_args
       
       # The normal variant does not call 'exit' after return from main (c lingo: freestanding execution environment)
 
