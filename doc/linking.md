@@ -83,6 +83,39 @@ in your linker script:
    malloc. Malloc will still be able to use all memory between the end
    of pre-allocate data and the bottom of the stack area.
 
+### Supplying MEMORY externally (SDK builds)
+
+The variable-based mechanism above bakes the same `MEMORY { flash ...
+ram ... }` layout into every picolibc.ld and only lets callers tweak
+addresses and sizes. That works for a single-target build but not for
+an SDK that wants **one** picolibc build to serve **many** boards
+whose memory maps differ in shape (multiple RAM banks, memory-mapped
+peripherals, non-contiguous regions, ...).
+
+Set the `external_memory` cross-file property to `true` and picolibc
+will emit no `MEMORY {}` block at all. Your board's linker script then
+provides the entire memory map before including picolibc.ld:
+
+	/* my-board.ld */
+	MEMORY {
+	    flash (rx!w) : ORIGIN = 0x08000000, LENGTH = 128K
+	    ram   (rwx)  : ORIGIN = 0x20000000, LENGTH = 16K
+	    /* additional banks, peripherals, etc. */
+	}
+
+	INCLUDE picolibc.ld
+
+Contract: the linker script that INCLUDEs picolibc.ld MUST define at
+least the `flash` and `ram` regions by name (picolibc.ld references
+`ORIGIN(ram)` and `LENGTH(ram)` when computing the initial stack
+pointer). RAM-only targets can point `flash` at the same region as
+`ram`.
+
+Cross file example:
+
+	[properties]
+	external_memory = true
+
 ### Arranging Code and Data in Memory
 
 Where bits of code and data land in memory can be controlled to some

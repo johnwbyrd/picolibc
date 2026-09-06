@@ -1125,6 +1125,20 @@ foreach params : [default_target] + targets
     picolibc_ld_data.set('INIT_PHDRS', init_phdrs)
     picolibc_ld_data.set('INIT_SECTIONS', init_sections)
 
+    # external_memory: when true, picolibc.ld emits no MEMORY {} block
+    # itself. The caller (typically an SDK or a board-support package)
+    # must supply their own linker script that defines the `flash` and
+    # `ram` memory regions and then INCLUDEs picolibc.ld. This lets a
+    # single picolibc build serve many target boards that differ only in
+    # their memory map, without rebuilding picolibc per board.
+    if meson.get_external_property('external_memory', false)
+      picolibc_ld_data.set('MEMORY_BLOCK_OPEN',  '/*')
+      picolibc_ld_data.set('MEMORY_BLOCK_CLOSE', '*/')
+    else
+      picolibc_ld_data.set('MEMORY_BLOCK_OPEN',  '')
+      picolibc_ld_data.set('MEMORY_BLOCK_CLOSE', '')
+    endif
+
     # Get default memory configuration values
 
     _default_flash_addr =  meson.get_external_property('default_flash_addr_' + custom_mem_config,

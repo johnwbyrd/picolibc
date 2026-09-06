@@ -40,6 +40,13 @@ ENTRY(@PREFIX@_start)
  * some phony values here to make things link for testing
  */
 
+/* When the `external_memory` cross-file property is set, the MEMORY {}
+ * block below is wrapped in /* ... *\/ so it is omitted from the
+ * generated linker script. The caller must supply their own linker
+ * script that defines `flash` and `ram` memory regions and INCLUDEs
+ * this file.
+ */
+@MEMORY_BLOCK_OPEN@
 MEMORY
 {@INIT_MEMORY@
 	flash (rx!w) :
@@ -49,6 +56,7 @@ MEMORY
 		ORIGIN = DEFINED(@PREFIX@__ram) ? @PREFIX@__ram : @DEFAULT_RAM_ADDR@,
 		LENGTH = DEFINED(@PREFIX@__ram_size) ? @PREFIX@__ram_size : @DEFAULT_RAM_SIZE@
 }
+@MEMORY_BLOCK_CLOSE@
 
 PHDRS
 {@INIT_PHDRS@
