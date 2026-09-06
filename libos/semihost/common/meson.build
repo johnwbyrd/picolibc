@@ -105,7 +105,7 @@ src_semihost += [
   src_semihost_fake_setrlimit,
   src_semihost_fake_stat,
   src_semihost_fake_statvfs,
-  ]:libos/semihost/common/meson.build
+  ]
 
 inc_headers = ['semihost.h']
 if really_install

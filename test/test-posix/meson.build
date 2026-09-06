@@ -111,6 +111,9 @@ foreach params : targets
   _link_args = target_c_args + _lib_files + get_variable('test_link_args' + target, test_link_args)
   _link_depends = get_variable('test_link_depends' + target, test_link_depends) + _libs
   foreach t1 : tests
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
     if test_skip.contains(t1)
       continue
     endif
@@ -140,6 +143,9 @@ foreach params : targets
   endforeach
 
   foreach t1 : tests_failure
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
     t1_src = t1 + '.c'
     t1 += '-failure'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1 + target + '.txt"']
@@ -171,6 +177,9 @@ endforeach
 if enable_native_tests
 
   foreach t1 : tests
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
     t1_src = t1 + '.c'
     t1_name = t1 + '-native'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1_name + '.txt"']
@@ -186,6 +195,9 @@ if enable_native_tests
   endforeach
 
   foreach t1 : tests_failure
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
     t1_src = t1 + '.c'
     t1_name = t1 + '-failure--native'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1_name + '.txt"']

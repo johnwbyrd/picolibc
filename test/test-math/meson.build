@@ -221,6 +221,9 @@ if enable_native_math_tests
     if t1 in test_skip_native
       continue
     endif
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
 
     t1_src = t1 + '.c'
     t1_name = t1 + '-native'

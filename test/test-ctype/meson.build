@@ -166,6 +166,9 @@ if enable_native_tests
   endif
 
   foreach t1 : tests_ctype
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
     t1_src = t1 + '.c'
     t1_name = t1 + '-native'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1_name + '.txt"']
@@ -183,6 +186,9 @@ if enable_native_tests
   if diff.found()
 
     foreach t : tests_ctype_diff
+      if allowed_tests.length() > 0 and not (t in allowed_tests)
+        continue
+      endif
       src = t + '.c'
       n = t + '-native'
       o = t + '-out'

@@ -248,6 +248,9 @@ endforeach
 if enable_native_tests
 
   foreach t1 : tests + tests_printf
+    if allowed_tests.length() > 0 and not (t1 in allowed_tests)
+      continue
+    endif
     t1_src = t1 + '.c'
     t1_name = t1 + '-native'
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1_name + '.txt"']
