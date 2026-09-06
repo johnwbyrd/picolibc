@@ -33,10 +33,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #define __STDC_WANT_LIB_EXT1__ 1
-#include "stdio_private.h"
-#include <stdio.h>
-#include <stddef.h>
-#include <stdbool.h>
+#include "local-stdio.h"
 #include "../stdlib/local_s.h"
 
 int
@@ -69,7 +66,7 @@ sprintf_s(char * __restrict s, rsize_t bufsize, const char * __restrict fmt, ...
     return rc;
 
 handle_error:
-    if (__cur_handler != NULL) {
+    if (__cur_handler != 0) {
         __cur_handler(msg, NULL, -1);
     }
 

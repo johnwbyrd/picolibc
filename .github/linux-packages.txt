@@ -4,8 +4,8 @@ cmake
 file
 ninja-build
 gcc
-libx32gcc-15-dev
-lib32gcc-15-dev
+libx32gcc-16-dev
+lib32gcc-16-dev
 gcc-i686-linux-gnu
 libc6-dev-i386-cross
 gcc-arm-none-eabi
@@ -28,14 +28,18 @@ gcc-sparc64-linux-gnu
 libc6-dev-sparc64-cross
 libc6:i386
 libc6-dev-i386
-lib32stdc++-15-dev
+lib32stdc++-16-dev
+libubsan1
+libubsan1:i386
 lld
 clang
+libclang-rt-21-dev
 llvm-libunwind1
 qemu-system-x86
 qemu-system-arm
 qemu-system-misc
 qemu-system-ppc64
+qemu-system-riscv
 libdbus-1-dev
 ca-certificates
 wget
@@ -43,3 +47,4 @@ gnupg
 locales
 libc++-dev
 libc++abi-dev
+

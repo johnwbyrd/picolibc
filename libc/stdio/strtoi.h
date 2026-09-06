@@ -30,7 +30,7 @@
   POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "stdio_private.h"
+#include "local-stdio.h"
 #include <inttypes.h>
 
 #ifdef WIDE_CHARS
@@ -98,6 +98,12 @@ strtoi(const strtoi_char * __restrict nptr, strtoi_char ** __restrict endptr, in
     if (i == '0') {
         if (TOLOWER(*s) == 'x' && ((base | 16) == 16)) {
             base = 16;
+            /* Parsed the '0' */
+            nptr = (const strtoi_char *)s;
+            i = s[1];
+            s += 2;
+        } else if (TOLOWER(*s) == 'b' && ((base | 2) == 2)) {
+            base = 2;
             /* Parsed the '0' */
             nptr = (const strtoi_char *)s;
             i = s[1];

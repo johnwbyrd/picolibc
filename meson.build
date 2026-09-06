@@ -1,7 +1,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Copyright © 2019-2021 Keith Packard
+# Copyright © 2019-2026 Keith Packard
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -41,8 +41,8 @@ project('picolibc', 'c',
           'warning_level=2',
 	],
 	license : 'BSD',
-	meson_version : '>= 0.53',
-	version: '1.8.10'
+	meson_version : '>= 0.61',
+	version: '1.8.12'
        )
 
 # When picolibc is embedded as a subproject you probably don't expect
@@ -54,6 +54,7 @@ really_install = get_option('force-install') or not meson.is_subproject()
 fs = import('fs')
 
 cc = meson.get_compiler('c')
+compiler_id = cc.get_id()
 
 # Find the compiler installation directory by parsing the output of
 # cc -print-search-dirs
@@ -61,24 +62,10 @@ cc = meson.get_compiler('c')
 cc_install_dir = ''
 foreach _line : run_command(cc.cmd_array() + ['-print-search-dirs'], check : false).stdout().split('\n')
   if _line.startswith('install: ')
-    if meson.version().version_compare('>=0.56')
-      # trim off the leading 'install: '
-      cc_install_dir = _line.substring(9)
-    else
-      cc_install_dir = run_command(['expr', _line, ':', 'install: *\(.*\)'], check : false).stdout().split('\n')[0]
-    endif
+    # trim off the leading 'install: '
+    cc_install_dir = _line.substring(9)
   endif
 endforeach
-
-# these options are required for all C compiler operations, including
-# detecting many C compiler features, as we cannot expect there
-# to be a working C library on the system.
-
-core_c_args = []
-use_stdlib = get_option('use-stdlib')
-if not use_stdlib
-  core_c_args += cc.get_supported_arguments(['-nostdlib'])
-endif
 
 # Find the picolibc name for the host cpu. Provide
 # for some common aliases
@@ -140,13 +127,13 @@ endif
 enable_multilib = get_option('multilib')
 multilib_list = get_option('multilib-list')
 multilib_exclude = get_option('multilib-exclude')
-enable_picolib = get_option('picolib')
+multilib_include = get_option('multilib-include')
 enable_picocrt = get_option('picocrt')
 enable_picocrt_lib = get_option('picocrt-lib')
 picocrt_enable_mmu = get_option('picocrt-enable-mmu')
 test_machine = get_option('test-machine')
-enable_semihost = get_option('semihost')
 enable_tests = get_option('tests')
+enable_libdl = get_option('libdl')
 if get_option('tests-cdefs') == 'auto'
   enable_cdefs_tests = enable_tests
 else
@@ -161,12 +148,16 @@ else
   enable_exhaustive_math_tests = exhaustive_math_tests_value == 'true'
 endif
 tests_enable_stack_protector = get_option('tests-enable-stack-protector')
-tests_enable_full_malloc_stress = get_option('tests-enable-full-malloc-stress')
 tests_enable_posix_io = get_option('tests-enable-posix-io')
+
+use_hlt_semihosting = false
+if get_option('use-hlt-semihosting')
+  use_hlt_semihosting = true
+endif
 
 # C++ is only used in tests, so only check for it when tests are enabled
 if enable_tests
-  have_cplusplus = add_languages('cpp', required: false)
+  have_cplusplus = add_languages('cpp', required: false, native: false)
   if have_cplusplus
     cpp = meson.get_compiler('cpp')
   endif
@@ -174,44 +165,102 @@ else
   have_cplusplus = false
 endif
 
+# Malloc settings
+
 enable_malloc = get_option('enable-malloc')
-malloc_clear_freed = get_option('malloc-clear-freed')
 internal_heap = get_option('internal-heap')
 
-c_args = core_c_args
-native_common_args = ['-DNO_NEWLIB']
+# Figure out what flags the linker supports
+
+has_link_defsym = false
+has_link_alias = false
+
+if cc.symbols_have_underscore_prefix()
+  global_prefix = '_'
+else
+  global_prefix = ''
+endif
+
+# Figure out how to pass aliases on the compiler command line.  Do
+# that by finding a suitable alias for the default entry point.
+
+foreach start : ['start', '_start', '__start', '___start']
+  _defsym = '-Wl,--defsym=@0@=@1@main'.format(start, global_prefix)
+  if cc.has_link_argument(_defsym)
+    has_link_defsym = true
+    break
+  endif
+  _alias = '-Wl,-alias,@1@main,@0@'.format(start, global_prefix)
+  if cc.has_link_argument(_alias)
+    has_link_alias = true
+    break
+  endif
+endforeach
+
+has_link_defsym = meson.get_external_property('has_link_defsym', has_link_defsym)
+has_link_alias = meson.get_external_property('has_link_alias', has_link_alias)
+
+# If an empty linker command line doesn't work, then pass the alias
+# argument computed above when performing compiler tests involving
+# linking
+
+link_test_args = []
+
+if not cc.has_multi_link_arguments([])
+  if has_link_defsym
+    link_test_args += [_defsym]
+  elif has_link_alias
+    link_test_args += [_alias]
+  endif
+endif
+
+# Find the compiler support library
+
+runtime_lib = [meson.get_external_property('librt', meson.get_external_property('libgcc', false))]
+
+if runtime_lib == [false]
+  runtime_lib = []
+  foreach lrt : ['-lgcc', '-lclang_rt.builtins']
+    if cc.has_multi_link_arguments(link_test_args + [lrt])
+      runtime_lib = [lrt]
+      break
+    endif
+  endforeach
+endif
+
+# Add run-time library for use in future linking tests
+
+link_test_args += runtime_lib
+
+# these options are required for all C compiler operations, including
+# detecting many C compiler features, as we cannot expect there
+# to be a working C library on the system.
+
+c_args = meson.get_external_property('target_c_args', [])
+
+use_stdlib = get_option('use-stdlib')
+if not use_stdlib
+  c_args += cc.get_supported_arguments(['-nostdlib'])
+endif
+
+native_c_args = ['-DNO_NEWLIB']
 
 profile = get_option('profile')
 if profile
   c_args += ['-pg', '-no-pie']
-  native_common_args += ['-pg']
+  native_c_args += ['-pg']
 endif
 
 if get_option('freestanding')
   c_args += ['-ffreestanding']
 endif
 
-if have_cplusplus
-  cpp_args = c_args
-  cpp_flags = cpp.get_supported_arguments(['-fno-common', '-frounding-math', '-fsignaling-nans',
-				           '-Wno-unsupported-floating-point-opt',
-				           '-fno-builtin-copysignl'])
-  cpp_args += cpp_flags
-  native_cpp_args = native_common_args + cpp_flags
-endif
-
-# Disable ssp and fortify source while building picolibc (it's enabled
-# by default by the ubuntu native compiler)
-c_flags = cc.get_supported_arguments(['-fno-common',
-                                      '-frounding-math',
-                                      '-fsignaling-nans',
-                                      '-fstrict-flex-arrays=3',
-                                      '-Wflex-array-member-not-at-end',
-				      '-Wno-unsupported-floating-point-opt',
-				      '-fno-builtin-copysignl'])
-
-c_args += c_flags
-native_c_args = native_common_args + c_flags
+# We don't need '-fdata-sections' currently as there aren't any
+# files with data used in separate code paths. This works around
+# versions of gcc for RISC-V which have a bug that mis-names
+# initialized read-only data segments when -fdata-sections
+# is defined
+c_args += cc.get_supported_arguments(['-ffunction-sections'])
 
 sanitize_flag = get_option('sanitize')
 if sanitize_flag == 'none'
@@ -244,12 +293,196 @@ else
   native_c_args += c_sanitize_flags
 endif
 
-if cc.symbols_have_underscore_prefix()
-  global_prefix = '_'
+stack_guard_spec = ''
+stack_guard_option = get_option('stack-protector-guard')
+prefer_tls_stack_guard = false
+if stack_guard_option == 'tls'
+  prefer_tls_stack_guard = true
 else
-  global_prefix = ''
+  if stack_guard_option == 'auto' and host_cpu_family == 'powerpc'
+    prefer_tls_stack_guard = true
+  endif
 endif
+have_tls_stack_guard = fs.is_file('libc/machine' / host_cpu_family / 'machine/_ssp_tls.h')
+if have_tls_stack_guard
+  c_stack_guard_tls_flags = cc.get_supported_arguments(['-mstack-protector-guard=tls'])
+  if c_stack_guard_tls_flags == []
+    have_tls_stack_guard = false
+  endif
+endif
+tls_stack_guard = prefer_tls_stack_guard and have_tls_stack_guard
+if tls_stack_guard
+  stack_guard_spec = '%{!mstack-protector-guard:-mstack-protector-guard=tls}'
+  c_args += c_stack_guard_tls_flags
+else
+  if stack_guard_option == 'tls'
+    if not thread_local_storage
+      error('stack-protector-guard=tls option selected, but thread local storage disabled')
+    else
+      error('stack-protector-guard=tls option selected, but not supported for this CPU')
+    endif
+  endif
+  c_stack_guard_global_flags = cc.get_supported_arguments(['-mstack-protector-guard=global'])
+  if c_stack_guard_global_flags != []
+    stack_guard_spec = '%{!mstack-protector-guard:-mstack-protector-guard=global}'
+    c_args += c_stack_guard_global_flags
+  endif
+endif
+
+tls_model_spec = ''
+thread_local_storage = false
+thread_local_storage_option = get_option('thread-local-storage')
+have_picolibc_tls_api = get_option('thread-local-storage-api') and fs.is_file('libc/machine' / host_cpu_family / 'tls.c')
+if thread_local_storage_option == 'auto' or thread_local_storage_option == 'picolibc'
+  # We assume that _set_tls() is defined in the arch specific tls.c
+  if thread_local_storage_option == 'auto' or have_picolibc_tls_api
+    thread_local_storage = not cc.has_function('__emutls_get_address', args: c_args + link_test_args)
+  endif
+else
+  thread_local_storage = get_option('thread-local-storage') == 'true'
+endif
+
+if thread_local_storage
+  tls_model_spec = '%{!ftls-model:-ftls-model=' + get_option('tls-model') + '}'
+
+  tls_arg = '-ftls-model=' + get_option('tls-model')
+  assert(cc.has_argument(tls_arg), 'Compiler does not support \'-ftls-model\'!')
+  c_args += [tls_arg]
+endif
+
+if get_option('analyzer')
+  c_args += cc.get_supported_arguments(['-fanalyzer'])
+endif
+
+common_options = [
+  '-Werror=vla',
+  '-Warray-bounds',
+  '-Werror=double-promotion',
+  '-Wno-missing-braces',
+  '-Wno-return-type',
+  '-Wmissing-prototypes',
+  '-Wmissing-declarations',
+  '-Werror=implicit-fallthrough=5',
+  '-Werror=unreachable-code-fallthrough',
+  '-Werror=implicit-function-declaration',
+  '-Wold-style-definition',
+  '-Wno-implicit-int',
+  '-Wflex-array-member-not-at-end',
+  '-fno-common',
+  '-frounding-math',
+  '-fsignaling-nans',
+  '-fstrict-flex-arrays=3',
+  '-fno-builtin-copysignl',
+  '-fno-stack-protector',
+  '-Wthread-safety',
+]
+
+if compiler_id == 'clang'
+  common_options += [
+  '-Wno-unused-command-line-argument',
+  '-Wno-unsupported-floating-point-opt',
+  ]
+endif
+
+cpp_options = [
+  '-fno-exceptions',
+  '-fno-unwind-tables',
+  ]
+
+werror_c_flag = cc.get_supported_arguments(['-Werror'])
+
+# Split out C++ args at this point to add C and C++ specific args
+if have_cplusplus
+  cpp_args = c_args
+  native_cpp_args = native_c_args
+
+  # We can't use get_supported_arguments because known flags
+  # not supported for the target language generate warnings
+  # not errors, so we need -Werror
+  cpp_flags = []
+  foreach _flag : common_options + cpp_options
+    if cpp.compiles('extern int i;',
+                    args: ['-Werror', _flag],
+                    name: _flag)
+      cpp_flags += [_flag]
+    endif
+  endforeach
+  cpp_args += cpp_flags
+  native_cpp_args += cpp_flags
+endif
+
+c_flags = []
+foreach _flag : common_options
+  if cc.compiles('extern int i;',
+                 args: ['-Werror', _flag],
+                 name: _flag)
+    c_flags += [_flag]
+  endif
+endforeach
+c_args += c_flags
+native_c_args += c_flags
+
+# Make sure _LIBC is not defined when building tests
+test_c_args = c_args
+c_args += ['-D_LIBC', '-U_FORTIFY_SOURCE']
+
+if have_cplusplus
+  test_cpp_args = cpp_args
+  cpp_args += ['-D_LIBC', '-U_FORTIFY_SOURCE']
+endif
+
+test_flags = []
+# Select a fortify source option
+fortify_source = get_option('fortify-source')
+if fortify_source == 'none'
+  test_flags += ['-U_FORTIFY_SOURCE']
+else
+  test_flags += ['-D_FORTIFY_SOURCE=' + fortify_source]
+endif
+if tests_enable_posix_io
+  test_flags += ['-DTESTS_ENABLE_POSIX_IO']
+endif
+test_c_args += test_flags
+if have_cplusplus
+  test_cpp_args += test_flags
+endif
+
+# All done computing C compiler arguments
+#
+# c_args            target C code
+# cpp_args          target C++ code
+# native_c_args     native C code
+# native_cpp_args   native C++ code
+# test_c_args       target test C code
+# test_cpp_args     target test C++ code
+
+global_link_args = []
+foreach ld : ['-Wl,--no-warn-rwx-segments', '-Wl,--no-fatal-warnings', '-Wl,-znoexecstack']
+  if cc.has_multi_link_arguments(link_test_args + [ld])
+    global_link_args += [ld]
+  endif
+endforeach
+
+# Get additional flags used for linking tests.
+
+test_link_args_base = runtime_lib + global_link_args
+
+test_link_args_extra = ['-Wl,--gc-sections']
+
+if profile
+  test_link_args_extra += ['-pg']
+endif
+
+test_link_args_extra += test_c_args
+
+foreach ld : test_link_args_extra
+  if cc.has_multi_link_arguments(link_test_args + [ld])
+    test_link_args_base += [ld]
+  endif
+endforeach
+
 fast_strcmp = get_option('fast-strcmp')
+strcmp_pair = get_option('strcmp-pair')
 
 mb_capable = get_option('mb-capable')
 mb_extended_charsets = mb_capable and get_option('mb-extended-charsets')
@@ -300,80 +533,7 @@ io_c99_formats = get_option('io-c99-formats')
 io_pos_args = get_option('io-pos-args')
 io_long_double = get_option('io-long-double')
 
-# Figure out what flags the linker supports
-
-has_link_defsym = false
-has_link_alias = false
-
-
-# Figure out how to pass aliases on the compiler command line.  Do
-# that by finding a suitable alias for the default entry point.
-
-foreach start : ['start', '_start', '__start', '___start']
-  _defsym = '-Wl,--defsym=@0@=@1@main'.format(start, global_prefix)
-  if cc.has_link_argument(_defsym)
-    has_link_defsym = true
-    break
-  endif
-  _alias = '-Wl,-alias,@1@main,@0@'.format(start, global_prefix)
-  if cc.has_link_argument(_alias)
-    has_link_alias = true
-    break
-  endif
-endforeach
-
-has_link_defsym = meson.get_cross_property('has_link_defsym', has_link_defsym)
-has_link_alias = meson.get_cross_property('has_link_alias', has_link_alias)
-
-# If an empty linker command line doesn't work, then pass the alias
-# argument computed above when performing compiler tests involving
-# linking
-
-link_test_args = []
-
-if not cc.has_multi_link_arguments([])
-  if has_link_defsym
-    link_test_args += [_defsym]
-  elif has_link_alias
-    link_test_args += [_alias]
-  endif
-endif
-
-# Find the compiler support library
-
-runtime_lib = [meson.get_cross_property('librt', meson.get_cross_property('libgcc', false))]
-
-if runtime_lib == [false]
-  runtime_lib = []
-  foreach lrt : ['-lgcc', '-lclang_rt.builtins']
-    if cc.has_multi_link_arguments(link_test_args + [lrt])
-      runtime_lib = [lrt]
-      break
-    endif
-  endforeach
-endif
-
-# Add run-time library for use in future linking tests
-
-link_test_args += runtime_lib
-
-# Get additional flags used for linking tests.
-
-test_link_args_base = runtime_lib
-
-test_link_args_extra = ['-Wl,--gc-sections', '-Wl,--no-warn-rwx-segments']
-
-if profile
-  test_link_args_extra += ['-pg']
-endif
-
-foreach ld : test_link_args_extra
-  if cc.has_multi_link_arguments(link_test_args + [ld])
-    test_link_args_base += [ld]
-  endif
-endforeach
-
-stack_symbol = meson.get_cross_property('stack_symbol', '__stack')
+stack_symbol = meson.get_external_property('stack_symbol', '__stack')
 
 # stdio options
 posix_console = get_option('posix-console')
@@ -381,11 +541,7 @@ io_float_exact = get_option('io-float-exact')
 atomic_ungetc = get_option('atomic-ungetc')
 _line = get_option('format-default')
 # Pick off just the leading character
-if meson.version().version_compare('>=0.56')
-  format_default = _line.substring(0, 1)
-else
-  format_default = run_command(['expr', 'substr', _line, '1', '1'], check : false).stdout().split('\n')[0]
-endif
+format_default = _line.substring(0, 1)
 
 printf_aliases = get_option('printf-aliases')
 io_percent_b = get_option('io-percent-b')
@@ -436,57 +592,6 @@ if host_cpu_family == ''
   message('Computed host_cpu_family as ' + host_cpu_family)
 endif
 
-tls_model_spec = ''
-thread_local_storage = false
-thread_local_storage_option = get_option('thread-local-storage')
-have_picolibc_tls_api = get_option('thread-local-storage-api') and fs.is_file('libc/machine' / host_cpu_family / 'tls.c')
-if thread_local_storage_option == 'auto' or thread_local_storage_option == 'picolibc'
-  # We assume that _set_tls() is defined in the arch specific tls.c
-  if thread_local_storage_option == 'auto' or have_picolibc_tls_api
-    thread_local_storage = not cc.has_function('__emutls_get_address', args: core_c_args + link_test_args)
-  endif
-else
-  thread_local_storage = get_option('thread-local-storage') == 'true'
-endif
-if thread_local_storage
-  tls_model_spec = '%{!ftls-model:-ftls-model=' + get_option('tls-model') + '}'
-endif
-
-stack_guard_spec = ''
-stack_guard_option = get_option('stack-protector-guard')
-prefer_tls_stack_guard = false
-if stack_guard_option == 'tls'
-  prefer_tls_stack_guard = true
-else
-  if stack_guard_option == 'auto' and host_cpu_family == 'powerpc'
-    prefer_tls_stack_guard = true
-  endif
-endif
-have_tls_stack_guard = fs.is_file('libc/machine' / host_cpu_family / 'machine/_ssp_tls.h')
-if have_tls_stack_guard
-  c_stack_guard_tls_flags = cc.get_supported_arguments(['-mstack-protector-guard=tls'])
-  if c_stack_guard_tls_flags == []
-    have_tls_stack_guard = false
-  endif
-endif
-tls_stack_guard = prefer_tls_stack_guard and have_tls_stack_guard
-if tls_stack_guard
-  stack_guard_spec = '%{!mstack-protector-guard:-mstack-protector-guard=tls}'
-  c_args += c_stack_guard_tls_flags
-else
-  if stack_guard_option == 'tls'
-    if not thread_local_storage
-      error('stack-protector-guard=tls option selected, but thread local storage disabled')
-    else
-      error('stack-protector-guard=tls option selected, but not supported for this CPU')
-    endif
-  endif
-  c_stack_guard_global_flags = cc.get_supported_arguments(['-mstack-protector-guard=global'])
-  if c_stack_guard_global_flags != []
-    stack_guard_spec = '%{!mstack-protector-guard:-mstack-protector-guard=global}'
-    c_args += c_stack_guard_global_flags
-  endif
-endif
 
 if sysroot_install
   # Get 'sysroot' or 'GCC_EXEC_PREFIX' from GCC output
@@ -553,10 +658,9 @@ else
   specs_install = true
 endif
 
-# Let targets add more support libraries 
-additional_libs_list = meson.get_cross_property('additional_libs', [])
+# Let targets add more support libraries
+additional_libs_list = meson.get_external_property('additional_libs', [])
 
-compiler_id = cc.get_id()
 if compiler_id == 'ccomp'
   # When passing the specs file to CompCert, the libcompcert needs to be included there as well
   additional_libs_list += '-lcompcert'
@@ -572,280 +676,22 @@ if compiler_id == 'gcc' and target_machine.cpu_family() == 'msp430'
   additional_libs += hwmult_snippet
 endif
 
-specs_extra = ''
-specs_extra_list = meson.get_cross_property('specs_extra', [])
-if specs_extra_list != []
-  specs_extra = '\n' + '\n'.join(specs_extra_list)
-endif
-
-# Handle old-style printf/scanf selection mechanism in the specs file
-
-specs_printf = ''
-if printf_aliases
-  specs_printf=('%{DPICOLIBC_DOUBLE_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__d_vfprintf}' +
-		' %{DPICOLIBC_DOUBLE_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__d_vfscanf}' +
-                ' %{DPICOLIBC_FLOAT_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__f_vfprintf}' +
-		' %{DPICOLIBC_FLOAT_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__f_vfscanf}' +
-		' %{DPICOLIBC_LONG_LONG_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__l_vfprintf}' +
-		' %{DPICOLIBC_LONG_LONG_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__l_vfscanf}' +
-		' %{DPICOLIBC_INTEGER_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__i_vfprintf}' +
-		' %{DPICOLIBC_INTEGER_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__i_vfscanf}' +
-		' %{DPICOLIBC_MINIMAL_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__m_vfprintf}' +
-		' %{DPICOLIBC_MINIMAL_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__m_vfscanf}').format(global_prefix)
-endif
-
-if system_libc
-  specs_isystem = ''
-  specs_libpath = ''
-  # The '%s' here asks gcc to search for this file in the 'usual' library path
-  specs_startfile = '%{-crt0=*:crt0-%*%O%s; :crt0%O%s}'
-else
-
-# Note that this value does *not* include the trailing %s which
-# means we have to compute the full path to the file
-crt0_expr = '%{-crt0=*:crt0-%*%O; :crt0%O}'
-
-#
-# Construct path values for specs file
-#
-# Each of these needs to handle --picolibc-prefix and
-# --picolibc-buildtype options, system-root vs absolute paths and
-# multilib stuff. That makes this all unreasonably complicated.
-#
-# Each option is computed in three parts, the 'prefix' value
-# (corresponding to --picolibc-prefix), the 'buildtype' value
-# (corresponding to --picolibc-buildtype) and the 'gen' value (for
-# when neither of these options is specifed).
-#
-# Because 'getenv' appends a space afterwards in GCC spec files, the
-# entire final path elements must be specified inside the parens;
-# e.g. %:getenv(FOO a/b/c) instead of %:getenv(FOO)/a/b/c. That means
-# we use the specs_prefix_format value computed above to build paths
-# instead of simple concatenation
-#
-
-#
-# How to format each of the three option-selected
-# values
-#
-picolibc_prefix_format = '-picolibc-prefix=*:@0@'
-picolibc_buildtype_format = '-picolibc-buildtype=*:@0@'
-gen_format = '@0@'
-
-#
-# How to glue the three options together
-#
-specs_option_format = '%{@0@; @1@; :@2@}'
-
-#
-# Build the -isystem value
-#
-
-prefix_include_dir = '%*/@0@/'.format(get_option('includedir'))
-isystem_prefix = picolibc_prefix_format.format(prefix_include_dir)
-
-buildtype_include_dir = specs_prefix_format.format(get_option('includedir') / '%*')
-isystem_buildtype = picolibc_buildtype_format.format(buildtype_include_dir)
-
-gen_include_dir = specs_prefix_format.format(get_option('includedir'))
-isystem_gen = gen_format.format(gen_include_dir)
-
-specs_isystem = '-isystem ' + specs_option_format.format(isystem_prefix, isystem_buildtype, isystem_gen)
-
-gcc_dumpmachine = run_command(cc.cmd_array() + ['-dumpmachine'], check : true).stdout().split('\n')[0]
-
-cxxconfig_path_postfix = '..' / gcc_dumpmachine / 'include' / 'c++' / '%(version)' / gcc_dumpmachine / '%M'
-cxxconfig_isystem_prefix = isystem_prefix / cxxconfig_path_postfix
-cxxconfig_isystem_buildtype = isystem_buildtype / cxxconfig_path_postfix
-cxxconfig_isystem_gen = isystem_gen / cxxconfig_path_postfix
-
-specs_isystem = specs_isystem + ' -isystem ' + specs_option_format.format(cxxconfig_isystem_prefix, cxxconfig_isystem_buildtype, cxxconfig_isystem_gen)
-
-#
-# Build the non-multilib -L value
-#
-
-prefix_lib_dir = '%*/@0@'.format(get_option('libdir'))
-lib_prefix = picolibc_prefix_format.format(prefix_lib_dir)
-
-buildtype_lib_dir = specs_prefix_format.format(get_option('libdir') / '%*')
-lib_buildtype = picolibc_buildtype_format.format(buildtype_lib_dir)
-
-gen_lib_dir = specs_prefix_format.format(get_option('libdir'))
-lib_gen = gen_format.format(gen_lib_dir)
-
-specs_libpath = '-L' + specs_option_format.format(lib_prefix, lib_buildtype, lib_gen)
-
-#
-# Build the non-multilib *startfile options
-#
-
-prefix_crt0_path = '%*/@0@'.format(get_option('libdir')) / crt0_expr
-crt0_prefix = picolibc_prefix_format.format(prefix_crt0_path)
-
-buildtype_crt0_path = specs_prefix_format.format(get_option('libdir') / '%*' / crt0_expr)
-crt0_buildtype = picolibc_buildtype_format.format(buildtype_crt0_path)
-
-gen_crt0_path = specs_prefix_format.format(get_option('libdir') / crt0_expr)
-crt0_gen = gen_format.format(gen_crt0_path)
-
-#
-# Now build multilib versions of the -L and *startfile values
-#
-if enable_multilib
-
-  #
-  # Build the multilib -L value
-  #
-  prefix_multilib_dir = '%*/@0@'.format(get_option('libdir') / '%M')
-  multilib_prefix = picolibc_prefix_format.format(prefix_multilib_dir)
-
-  buildtype_multilib_dir = specs_prefix_format.format(get_option('libdir') / '%*/%M')
-  multilib_buildtype = picolibc_buildtype_format.format(buildtype_multilib_dir)
-
-  gen_multilib_dir = specs_prefix_format.format(get_option('libdir') / '%M')
-  multilib_gen = gen_format.format(gen_multilib_dir)
-
-  specs_multilibpath = '-L' + specs_option_format.format(multilib_prefix, multilib_buildtype, multilib_gen)
-
-  #
-  # Prepend the multilib -L option to the non-multilib option
-  #
-  specs_libpath = specs_multilibpath + ' ' + specs_libpath
-
-  #
-  # Build the multilib *startfile options
-  #
-  prefix_multilib_crt0_path = '%*/@0@'.format(get_option('libdir')) / '%M' / crt0_expr
-  crt0_prefix = picolibc_prefix_format.format(prefix_multilib_crt0_path)
-
-  buildtype_multilib_crt0_path = specs_prefix_format.format(get_option('libdir') / '%*/%M' / crt0_expr)
-  crt0_buildtype = picolibc_buildtype_format.format(buildtype_multilib_crt0_path)
-
-  gen_multilib_crt0_path = specs_prefix_format.format(get_option('libdir') / '%M' / crt0_expr)
-  crt0_gen = gen_format.format(gen_multilib_crt0_path)
-endif
-  
-#
-# Construct the *startfile value from the options computed
-# above. As there's only one value, it's either the
-# multilib path or the non-multilib path
-#
-specs_startfile = specs_option_format.format(crt0_prefix, crt0_buildtype, crt0_gen)
-endif
-
-specs_data = configuration_data()
-specs_data.set('SPECS_ISYSTEM', specs_isystem)
-specs_data.set('SPECS_LIBPATH', specs_libpath)
-specs_data.set('SPECS_STARTFILE', specs_startfile)
-specs_data.set('TLSMODEL', tls_model_spec)
-specs_data.set('STACKGUARD', stack_guard_spec)
-specs_data.set('LINK_SPEC', meson.get_cross_property('link_spec', ''))
-specs_data.set('CC1_SPEC', meson.get_cross_property('cc1_spec', ''))
-specs_data.set('CC1PLUS_SPEC', meson.get_cross_property('cc1plus_spec', ''))
-specs_data.set('ADDITIONAL_LIBS', additional_libs)
-specs_data.set('SPECS_EXTRA', specs_extra)
-specs_data.set('SPECS_PRINTF', specs_printf)
-specs_data.set('PREFIX', global_prefix)
-
-# Create C and C++ specific specs data,
-# that includes setting the correct linker script
-# and adding the C++ startup/shutdown files
-
-specs_c_data = specs_data
-
-specs_c_data.set('PICOLIBC_LD', 'picolibc.ld')
-specs_c_data.set('CRTBEGIN', '')
-specs_c_data.set('CRTEND', '')
-
-specs_cpp_data = specs_data
-
-specs_cpp_data.set('PICOLIBC_LD', 'picolibcpp.ld')
-specs_cpp_data.set('CRTBEGIN', 'crtbegin%O%s')
-specs_cpp_data.set('CRTEND', 'crtend%O%s')
-
-picolibc_specs = configure_file(input: 'picolibc.specs.in',
-				output: 'picolibc.specs',
-				configuration: specs_c_data,
-				install_dir: specs_dir,
-				install: specs_install and really_install)
-
-picolibc_specs_name = 'picolibc.specs'
-
-picolibcpp_specs = configure_file(input: 'picolibc.specs.in',
-				  output: 'picolibcpp.specs',
-				  configuration: specs_cpp_data,
-				  install_dir: specs_dir,
-				  install: specs_install and really_install)
-
-# Not all compilers necessarily support all warnings; only use these which are:
-common_warnings = [
-  '-Werror=vla',
-  '-Warray-bounds',
-  '-Werror=double-promotion',
-  '-Wno-missing-braces',
-  '-Wno-return-type',
-  '-Wno-unused-command-line-argument',
-  '-Wmissing-prototypes',
-  '-Wmissing-declarations',
-  '-Werror=implicit-fallthrough=5',
-  '-Werror=unreachable-code-fallthrough',
-]
-if get_option('analyzer')
-  common_warnings += [
-    '-fanalyzer',
-    ]
-endif
-c_warnings = common_warnings + [
-  '-Werror=implicit-function-declaration',
-  '-Wold-style-definition',
-  '-Wno-implicit-int',
-]
-c_flags = cc.get_supported_arguments(c_warnings)
-c_args += c_flags
-native_c_args += c_flags
-
-# Make sure _LIBC is not defined when building tests
-test_c_args = c_args
-c_args += ['-D_LIBC', '-U_FORTIFY_SOURCE']
-
-# Select a fortify source option
-fortify_source = get_option('fortify-source')
-if fortify_source == 'none'
-  test_fortify_arg = '-U_FORTIFY_SOURCE'
-else
-  test_fortify_arg = '-D_FORTIFY_SOURCE=' + fortify_source
-endif
-test_c_args += [test_fortify_arg]
-if tests_enable_posix_io
-  test_c_args += ['-DTESTS_ENABLE_POSIX_IO']
-endif
-
-c_args += cc.get_supported_arguments(['-fno-stack-protector'])
-
-if have_cplusplus
-  cpp_warnings = common_warnings
-  cpp_flags = cpp.get_supported_arguments(cpp_warnings)
-  cpp_args += cpp_flags
-  cpp_flags = cpp.get_supported_arguments(['-fno-exceptions', '-fno-unwind-tables', '-fno-stack-protector'])
-  cpp_args += cpp_flags
-  test_cpp_args = cpp_args + [test_fortify_arg]
-endif
-
 # CompCert does not support bitfields in packed structs, so avoid using this optimization
 bitfields_in_packed_structs_code = '''
 struct test { int part: 24; } __attribute__((packed));
+unsigned int foobar (const struct test *p);
 unsigned int foobar (const struct test *p) { return p->part; }
 '''
-have_bitfields_in_packed_structs = cc.compiles(bitfields_in_packed_structs_code, name : 'packed structs may contain bitfields', args: core_c_args)
+have_bitfields_in_packed_structs = cc.compiles(bitfields_in_packed_structs_code, name : 'packed structs may contain bitfields', args: c_args)
 
 # CompCert does not support _Complex
 complex_code = '''
+float _Complex test(float _Complex z);
 float _Complex test(float _Complex z) { return z; }
 '''
-have_complex = cc.compiles(complex_code, name : 'supports _Complex', args: core_c_args)
+have_complex = cc.compiles(complex_code, name : 'supports _Complex', args: c_args)
 
-werror_c_args = core_c_args + cc.get_supported_arguments('-Werror')
+werror_c_args = c_args + cc.get_supported_arguments('-Werror')
 
 # CompCert uses the GCC preprocessor, which causes to
 #  > #if __has_attribute(__alloc_size__)
@@ -858,8 +704,8 @@ have_alloc_size = cc.compiles(alloc_size_code, name : 'attribute __alloc_size__'
 
 # attributes constructor/destructor are a GNU extension - if the compiler doesn't have them, don't test them.
 attr_ctor_dtor_code = '''
-void __attribute__((constructor(101))) ctor (void) {}
-void __attribute__((destructor(101))) dtor (void) {}
+static void __attribute__((constructor(101))) ctor (void) {}
+static void __attribute__((destructor(101))) dtor (void) {}
 '''
 have_attr_ctor_dtor = cc.compiles(attr_ctor_dtor_code, name : 'attributes constructor/destructor', args : werror_c_args)
 
@@ -883,17 +729,27 @@ if enable_multilib
   foreach target : target_list
     tmp = target.split(';')
     matches_exclude = false
+    if multilib_include != []
+      matches_exclude = true
+      foreach include : multilib_include
+        if tmp[0].contains(include)
+          matches_exclude = false
+          break
+        endif
+      endforeach
+    endif
     foreach exclude : multilib_exclude
       if tmp[0].contains(exclude)
         matches_exclude = true
-        message('skipping target ' + tmp[0])
         break
       endif
     endforeach
     if matches_exclude
+      message('skipping target ' + tmp[0])
       continue
     endif
-    flags = []
+
+    _c_flags = []
 
     # Let the user specify a subset of the possible multilib
     # configurations to build for
@@ -907,23 +763,23 @@ if enable_multilib
 	      # mode (which breaks libm). We don't need fph2 as that
 	      # doesn't set the single precision constant flag
 	      if flag == 'mcustom-fpu-cfg=60-1'
-		flags += ['-mcustom-fmuls=252', '-mcustom-fadds=253',
+		_c_flags += ['-mcustom-fmuls=252', '-mcustom-fadds=253',
 			  '-mcustom-fsubs=254']
 	      elif flag == 'mcustom-fpu-cfg=60-2'
-		flags += ['-mcustom-fmuls=252', '-mcustom-fadds=253',
+		_c_flags += ['-mcustom-fmuls=252', '-mcustom-fadds=253',
 			  '-mcustom-fsubs=254', '-mcustom-fdivs=255']
 	      elif flag == 'mcustom-fpu-cfg=72-3'
-		flags += ['-mcustom-floatus=243', '-mcustom-fixsi=244',
+		_c_flags += ['-mcustom-floatus=243', '-mcustom-fixsi=244',
 			  '-mcustom-floatis=245','-mcustom-fcmpgts=246',
 			  '-mcustom-fcmples=249', '-mcustom-fcmpeqs=250',
 			  '-mcustom-fcmpnes=251', '-mcustom-fmuls=252',
 			  '-mcustom-fadds=253', '-mcustom-fsubs=254',
 			  '-mcustom-fdivs=255']
 	      else
-		flags += '-' + flag
+		_c_flags += '-' + flag
 	      endif
 	    else
-	      flags += '-' + flag
+	      _c_flags += '-' + flag
 	    endif
 	  endif
 	endforeach
@@ -945,16 +801,16 @@ if enable_multilib
       # rv64 needs to use a non-default mcmodel so that variables can
       # live in a broader range of memory addresses
       if not has_mcmodel and name.strip('_').startswith('rv64')
-	flags += [ '-mcmodel=medany' ]
+	_c_flags += [ '-mcmodel=medany' ]
       endif
 
       # Add any extra flags for this target from the cross file
-      flags += meson.get_cross_property('c_args_' + name.strip('_'), [])
+      _c_flags += meson.get_external_property('c_args_' + name.strip('_'), [])
 
       targets += {
                   'name': name,
                   'dir': dir,
-                  'c_args': flags,
+                  'c_args': _c_flags,
                   'lib_prefix': lib_prefix,
                 }
     endif
@@ -1001,7 +857,7 @@ init_section_template = '''
 '''
 
 foreach params : [default_target] + targets
-  
+
   target = params['name']
   target_dir = params['dir']
   target_c_args = params['c_args']
@@ -1013,20 +869,20 @@ foreach params : [default_target] + targets
     foreach part : target.split('_')
       if part != ''
         target_part += '_' + part
-        custom_mem_config = meson.get_cross_property('custom_mem_config' + target_part, custom_mem_config)
+        custom_mem_config = meson.get_external_property('custom_mem_config' + target_part, custom_mem_config)
       endif
     endforeach
 
     target_head = target_dir.split('_')[0].underscorify()
-    custom_mem_config = meson.get_cross_property('custom_mem_config_' + target_head, custom_mem_config)
+    custom_mem_config = meson.get_external_property('custom_mem_config_' + target_head, custom_mem_config)
   endif
 
-  custom_mem_config = meson.get_cross_property('custom_mem_config' + target, custom_mem_config)
+  custom_mem_config = meson.get_external_property('custom_mem_config' + target, custom_mem_config)
 
   if target == 'default-target' or custom_mem_config != ''
 
     # Figure out all of the file and variable names
-    
+
     if target == 'default-target'
       picolibc_ld_file = 'picolibc.ld'
       picolibc_ld_variable = 'picolibc_ld'
@@ -1036,6 +892,10 @@ foreach params : [default_target] + targets
       picolibc_noflash_ld_variable = 'picolibc_noflash_ld'
       picolibc_noflash_ld_config_variable = 'picolibc_noflash_ld_config'
 
+      picolibc_linux_ld_file = 'picolibc_linux.ld'
+      picolibc_linux_ld_variable = 'picolibc_linux_ld'
+      picolibc_linux_ld_config_variable = 'picolibc_linux_ld_config'
+
       picolibcpp_ld_file = 'picolibcpp.ld'
       picolibcpp_ld_variable = 'picolibcpp_ld'
       picolibcpp_ld_config_variable = 'picolibcpp_ld_config'
@@ -1043,6 +903,10 @@ foreach params : [default_target] + targets
       picolibcpp_noflash_ld_file = 'picolibcpp_noflash.ld'
       picolibcpp_noflash_ld_variable = 'picolibcpp_noflash_ld'
       picolibcpp_noflash_ld_config_variable = 'picolibcpp_noflash_ld_config'
+
+      picolibcpp_linux_ld_file = 'picolibcpp_linux.ld'
+      picolibcpp_linux_ld_variable = 'picolibcpp_linux_ld'
+      picolibcpp_linux_ld_config_variable = 'picolibcpp_linux_ld_config'
 
       picolibc_ld_install = true
 
@@ -1060,13 +924,21 @@ foreach params : [default_target] + targets
       picolibc_noflash_ld_variable = 'picolibc' + target + '_noflash_ld'
       picolibc_noflash_ld_config_variable = 'picolibc_' + custom_mem_config + '_noflash_ld_config'
 
+      picolibc_linux_ld_file = 'picolibc_linux_' + custom_mem_config + '.ld'
+      picolibc_linux_ld_variable = 'picolibc_linux' + target + '_ld'
+      picolibc_linux_ld_config_variable = 'picolibc_linux_' + custom_mem_config + '_ld_config'
+
       picolibcpp_ld_file = 'picolibcpp_' + custom_mem_config + '.ld'
       picolibcpp_ld_variable = 'picolibcpp' + target + '_ld'
       picolibcpp_ld_config_variable = 'picolibcpp_' + custom_mem_config + '_ld_config'
 
-      picolibcpp_noflash_ld_file = 'picolibcpp_' + custom_mem_config + '_noflash.ld'
-      picolibcpp_noflash_ld_variable = 'picolibcpp_' + target.underscorify() + '_noflash_ld'
-      picolibcpp_noflash_ld_config_variable = 'picolibcpp_' + custom_mem_config + '_noflash_ld_config'
+      picolibcpp_noflash_ld_file = 'picolibcpp_noflash_' + custom_mem_config + '.ld'
+      picolibcpp_noflash_ld_variable = 'picolibcpp_noflash' + target.underscorify() + '_ld'
+      picolibcpp_noflash_ld_config_variable = 'picolibcpp_noflash_' + custom_mem_config + '_ld_config'
+
+      picolibcpp_linux_ld_file = 'picolibcpp_' + custom_mem_config + '_linux.ld'
+      picolibcpp_linux_ld_variable = 'picolibcpp_' + target.underscorify() + '_linux_ld'
+      picolibcpp_linux_ld_config_variable = 'picolibcpp_' + custom_mem_config + '_linux_ld_config'
 
       if thread_local_storage
         picolibc_inittls_ld_file = 'picolibc_inittls_' + custom_mem_config + '.ld'
@@ -1093,6 +965,7 @@ foreach params : [default_target] + targets
     picolibc_ld_data.set('PREFIX', global_prefix)
     picolibc_ld_data.set('INITTLS', ld_comment)
     picolibc_ld_data.set('DATATLS', '')
+    picolibc_ld_data.set('LINUX', '')
 
     # non-exec mode for ram PHDR
     picolibc_ld_data.set('RAM_MODE', 'w!rx')
@@ -1105,7 +978,7 @@ foreach params : [default_target] + targets
     # attributes for read-only data sections
     picolibc_ld_data.set('RODATA_MEM', 'flash')
     picolibc_ld_data.set('RODATA_AT', 'flash')
-    picolibc_ld_data.set('RODATA_PHDR', 'text')
+    picolibc_ld_data.set('RODATA_PHDR', 'rodata')
 
     # attributes for data-initialized read-write data sections
     picolibc_ld_data.set('DATA_MEM', 'ram')
@@ -1125,17 +998,17 @@ foreach params : [default_target] + targets
     picolibc_ld_data.set('STACK', stack_symbol)
 
     picolibc_ld_data.set('EXTRA_TEXT_SECTIONS',
-                                  meson.get_cross_property('extra_text_sections', ''))
+                                  meson.get_external_property('extra_text_sections', ''))
     picolibc_ld_data.set('EXTRA_RODATA_SECTIONS',
-                                  meson.get_cross_property('extra_rodata_sections', ''))
+                                  meson.get_external_property('extra_rodata_sections', ''))
     picolibc_ld_data.set('EXTRA_DATA_SECTIONS',
-                                  meson.get_cross_property('extra_data_sections', ''))
+                                  meson.get_external_property('extra_data_sections', ''))
     picolibc_ld_data.set('EXTRA_SDATA_SECTIONS',
-                                  meson.get_cross_property('extra_sdata_sections', ''))
+                                  meson.get_external_property('extra_sdata_sections', ''))
     picolibc_ld_data.set('EXTRA_BSS_SECTIONS',
-                                  meson.get_cross_property('extra_bss_sections', ''))
+                                  meson.get_external_property('extra_bss_sections', ''))
     picolibc_ld_data.set('EXTRA_SBSS_SECTIONS',
-                                  meson.get_cross_property('extra_sbss_sections', ''))
+                                  meson.get_external_property('extra_sbss_sections', ''))
 
     # We need to use different alignment flags for .tdata/.tbss for ld.bfd
     # (ALIGN_WITH_INPUT, which is not supported by ld.lld) and ld.lld
@@ -1165,6 +1038,12 @@ foreach params : [default_target] + targets
       picolibc_ld_data.set('TLS_INIT_PHDR', 'tls')
     endif
 
+    if host_cpu_family == 'riscv'
+      picolibc_ld_data.set('RISCV', '')
+    else
+      picolibc_ld_data.set('RISCV', ld_comment)
+    endif
+
     default_init_section_template = init_section_template.format('@0@', '''
 		KEEP (*(.text.init.enter))
 		KEEP (*(.data.init.enter))
@@ -1181,16 +1060,16 @@ foreach params : [default_target] + targets
     fallback_stack_size = '0x00001000'
     fallback_alignment = '8'
 
-    if meson.get_cross_property('separate_boot_flash_' + custom_mem_config,
-                                meson.get_cross_property('separate_boot_flash', false))
-      boot_flash_addr = meson.get_cross_property(
+    if meson.get_external_property('separate_boot_flash_' + custom_mem_config,
+                                meson.get_external_property('separate_boot_flash', false))
+      boot_flash_addr = meson.get_external_property(
         'default_boot_flash_addr_' + custom_mem_config,
-        meson.get_cross_property(
+        meson.get_external_property(
           'default_boot_flash_addr',
           '0x10000000'))
-      boot_flash_size = meson.get_cross_property(
+      boot_flash_size = meson.get_external_property(
         'default_boot_flash_size_' + custom_mem_config,
-        meson.get_cross_property(
+        meson.get_external_property(
           'default_boot_flash_size',
           '0x00000400'))
       additional_sections = [
@@ -1203,12 +1082,12 @@ foreach params : [default_target] + targets
       fallback_flash_addr = '0x10000400'
       fallback_flash_size = '0x0000fc00'
     else
-      additional_section_names = meson.get_cross_property('additional_sections_' + custom_mem_config,
-                                                     meson.get_cross_property('additional_sections', []))
+      additional_section_names = meson.get_external_property('additional_sections_' + custom_mem_config,
+                                                     meson.get_external_property('additional_sections', []))
       if additional_section_names != []
         foreach section_name : additional_section_names
           default_content_list =  ['*.(.' + section_name + ')', '*.(.' + section_name + '.*)']
-          content_list = meson.get_cross_property('default_' + section_name + '_contents', default_content_list)
+          content_list = meson.get_external_property('default_' + section_name + '_contents', default_content_list)
           contents = ''
           foreach content : content_list
             contents += '''
@@ -1217,8 +1096,8 @@ foreach params : [default_target] + targets
           additional_sections += [
             {
               'name' : section_name,
-              'addr' : meson.get_cross_property('default_' + section_name + '_addr'),
-              'size' : meson.get_cross_property('default_' + section_name + '_size'),
+              'addr' : meson.get_external_property('default_' + section_name + '_addr'),
+              'size' : meson.get_external_property('default_' + section_name + '_size'),
               'contents' : init_section_template.format(section_name, contents, section_name, 'text_' + section_name)
             }]
         endforeach
@@ -1238,7 +1117,7 @@ foreach params : [default_target] + targets
       endforeach
     else
       # Default init sections map to flash in the primary script; no option gating
-      init_section_name = meson.get_cross_property('init_section_name', 'init')
+      init_section_name = meson.get_external_property('init_section_name', 'init')
       init_sections = default_init_section_template.format(init_section_name, 'flash', 'text')
     endif
 
@@ -1248,89 +1127,113 @@ foreach params : [default_target] + targets
 
     # Get default memory configuration values
 
-    _default_flash_addr =  meson.get_cross_property('default_flash_addr_' + custom_mem_config,
-                                                    meson.get_cross_property(
+    _default_flash_addr =  meson.get_external_property('default_flash_addr_' + custom_mem_config,
+                                                    meson.get_external_property(
                                                       'default_flash_addr',
                                                       fallback_flash_addr))
 
-    _default_flash_size =  meson.get_cross_property('default_flash_size_' + custom_mem_config,
-                                                    meson.get_cross_property(
+    _default_flash_size =  meson.get_external_property('default_flash_size_' + custom_mem_config,
+                                                    meson.get_external_property(
                                                       'default_flash_size',
                                                       fallback_flash_size))
 
-    _default_ram_addr =  meson.get_cross_property('default_ram_addr_' + custom_mem_config,
-                                                  meson.get_cross_property(
+    _default_ram_addr =  meson.get_external_property('default_ram_addr_' + custom_mem_config,
+                                                  meson.get_external_property(
                                                     'default_ram_addr',
                                                     fallback_ram_addr))
 
-    _default_ram_size =  meson.get_cross_property('default_ram_size_' + custom_mem_config,
-                                                  meson.get_cross_property(
+    _default_ram_size =  meson.get_external_property('default_ram_size_' + custom_mem_config,
+                                                  meson.get_external_property(
                                                     'default_ram_size', fallback_ram_size))
 
-    _default_stack_size = meson.get_cross_property('default_stack_size_' + custom_mem_config,
-                                                   meson.get_cross_property(
+    _default_stack_size = meson.get_external_property('default_stack_size_' + custom_mem_config,
+                                                   meson.get_external_property(
                                                      'default_stack_size', fallback_stack_size))
 
-    _default_alignment = meson.get_cross_property('default_alignment_' + custom_mem_config,
-                                                  meson.get_cross_property(
+    _default_alignment = meson.get_external_property('default_alignment_' + custom_mem_config,
+                                                  meson.get_external_property(
                                                     'default_alignment', fallback_alignment))
 
     picolibc_ld_data.set('EXTRA_TEXT_SECTIONS',
-                                  meson.get_cross_property('extra_text_sections', ''))
+                                  meson.get_external_property('extra_text_sections', ''))
     picolibc_ld_data.set('EXTRA_RODATA_SECTIONS',
-                                  meson.get_cross_property('extra_rodata_sections', ''))
+                                  meson.get_external_property('extra_rodata_sections', ''))
     picolibc_ld_data.set('EXTRA_DATA_SECTIONS',
-                                  meson.get_cross_property('extra_data_sections', ''))
+                                  meson.get_external_property('extra_data_sections', ''))
     picolibc_ld_data.set('EXTRA_SDATA_SECTIONS',
-                                  meson.get_cross_property('extra_sdata_sections', ''))
+                                  meson.get_external_property('extra_sdata_sections', ''))
     picolibc_ld_data.set('EXTRA_BSS_SECTIONS',
-                                  meson.get_cross_property('extra_bss_sections', ''))
+                                  meson.get_external_property('extra_bss_sections', ''))
     picolibc_ld_data.set('EXTRA_SBSS_SECTIONS',
-                                  meson.get_cross_property('extra_sbss_sections', ''))
+                                  meson.get_external_property('extra_sbss_sections', ''))
 
     # Helper to resolve INCLUDE directives in linker properties
     # If a property starts with 'INCLUDE ', read the file contents instead
-    linker_preamble = meson.get_cross_property('linker_preamble', '')
+    linker_preamble = meson.get_external_property('linker_preamble', '')
     if linker_preamble.startswith('INCLUDE ')
       linker_preamble = fs.read(linker_preamble.split(' ')[1].strip())
     endif
     picolibc_ld_data.set('LINKER_PREAMBLE', linker_preamble)
 
-    extra_memory = meson.get_cross_property('extra_memory', '')
+    extra_memory = meson.get_external_property('extra_memory', '')
     if extra_memory.startswith('INCLUDE ')
       extra_memory = fs.read(extra_memory.split(' ')[1].strip())
     endif
     picolibc_ld_data.set('EXTRA_MEMORY', extra_memory)
 
-    extra_sections = meson.get_cross_property('extra_sections', '')
+    extra_sections = meson.get_external_property('extra_sections', '')
     if extra_sections.startswith('INCLUDE ')
       extra_sections = fs.read(extra_sections.split(' ')[1].strip())
     endif
     picolibc_ld_data.set('EXTRA_SECTIONS', extra_sections)
 
-    _default_noflash_flash_addr = meson.get_cross_property(
+    _default_noflash_flash_addr = meson.get_external_property(
       'default_noflash_flash_addr_' + custom_mem_config,
-      meson.get_cross_property('default_noflash_flash_addr', _default_flash_addr))
+      meson.get_external_property('default_noflash_flash_addr', _default_flash_addr))
 
-    _default_noflash_flash_size = meson.get_cross_property(
+    _default_noflash_flash_size = meson.get_external_property(
       'default_noflash_flash_size_' + custom_mem_config,
-      meson.get_cross_property('default_noflash_flash_size', _default_flash_size))
+      meson.get_external_property('default_noflash_flash_size', _default_flash_size))
 
-    _default_noflash_ram_addr = meson.get_cross_property(
+    _default_noflash_ram_addr = meson.get_external_property(
       'default_noflash_ram_addr_' + custom_mem_config,
-      meson.get_cross_property('default_noflash_ram_addr', _default_ram_addr))
+      meson.get_external_property('default_noflash_ram_addr', _default_ram_addr))
 
-    _default_noflash_ram_size = meson.get_cross_property(
+    _default_noflash_ram_size = meson.get_external_property(
       'default_noflash_ram_size_' + custom_mem_config,
-      meson.get_cross_property('default_noflash_ram_size', _default_ram_size))
+      meson.get_external_property('default_noflash_ram_size', _default_ram_size))
 
-    _default_noflash_stack_size = meson.get_cross_property(
+    _default_noflash_stack_size = meson.get_external_property(
       'default_noflash_stack_size_' + custom_mem_config,
-      meson.get_cross_property('default_noflash_stack_size', _default_stack_size))
+      meson.get_external_property('default_noflash_stack_size', _default_stack_size))
 
-    _default_noflash_alignment = meson.get_cross_property(
+    _default_noflash_alignment = meson.get_external_property(
       'default_noflash_alignment_' + custom_mem_config,
-      meson.get_cross_property('default_noflash_alignment', _default_alignment))
+      meson.get_external_property('default_noflash_alignment', _default_alignment))
+
+    _default_linux_flash_addr = meson.get_external_property(
+      'default_linux_flash_addr_' + custom_mem_config,
+      meson.get_external_property('default_linux_flash_addr', _default_flash_addr))
+
+    _default_linux_flash_size = meson.get_external_property(
+      'default_linux_flash_size_' + custom_mem_config,
+      meson.get_external_property('default_linux_flash_size', _default_flash_size))
+
+    _default_linux_ram_addr = meson.get_external_property(
+      'default_linux_ram_addr_' + custom_mem_config,
+      meson.get_external_property('default_linux_ram_addr', _default_ram_addr))
+
+    _default_linux_ram_size = meson.get_external_property(
+      'default_linux_ram_size_' + custom_mem_config,
+      meson.get_external_property('default_linux_ram_size', _default_ram_size))
+
+    _default_linux_stack_size = meson.get_external_property(
+      'default_linux_stack_size_' + custom_mem_config,
+      meson.get_external_property('default_linux_stack_size', _default_stack_size))
+
+    _default_linux_alignment = meson.get_external_property(
+      'default_linux_alignment_' + custom_mem_config,
+      meson.get_external_property('default_linux_alignment', _default_alignment))
 
     picolibc_ld_data.set('DEFAULT_FLASH_ADDR', _default_flash_addr)
     picolibc_ld_data.set('DEFAULT_FLASH_SIZE', _default_flash_size)
@@ -1338,6 +1241,10 @@ foreach params : [default_target] + targets
     picolibc_ld_data.set('DEFAULT_RAM_SIZE', _default_ram_size)
     picolibc_ld_data.set('DEFAULT_STACK_SIZE', _default_stack_size)
     picolibc_ld_data.set('DEFAULT_ALIGNMENT', _default_alignment)
+
+    # Set SDATA_ALIGNMENT if provided by the cross-compilation file, otherwise use DEFAULT_ALIGNMENT
+    _sdata_alignment = meson.get_external_property('sdata_alignment', _default_alignment)
+    picolibc_ld_data.set('SDATA_ALIGNMENT', _sdata_alignment)
 
     # Generate the default linker script
 
@@ -1368,7 +1275,7 @@ foreach params : [default_target] + targets
                                 install: picolibc_ld_install and really_install,
                                 install_dir: lib_dir))
     endif
-                   
+
     set_variable(picolibcpp_ld_variable, get_variable(picolibcpp_ld_config_variable))
 
     # Generate a linker script with separate TLS data
@@ -1389,7 +1296,7 @@ foreach params : [default_target] + targets
                                     install: picolibc_ld_install and really_install,
                                     install_dir: lib_dir))
       endif
-      
+
       set_variable(picolibc_inittls_ld_variable, get_variable(picolibc_inittls_ld_config_variable))
     endif
 
@@ -1423,8 +1330,8 @@ foreach params : [default_target] + targets
     # For ram_only targets (like MOS 6502), flash and ram have the same address,
     # so .init must go to ram to avoid section overlap. Other architectures
     # keep the inherited INIT_SECTIONS which places .init in flash.
-    if meson.get_cross_property('ram_only', false)
-      init_section_name = meson.get_cross_property('init_section_name', 'init')
+    if meson.get_external_property('ram_only', false)
+      init_section_name = meson.get_external_property('init_section_name', 'init')
       picolibc_noflash_ld_data.set('INIT_SECTIONS',
         default_init_section_template.format(init_section_name, 'ram', 'text'))
     endif
@@ -1464,6 +1371,64 @@ foreach params : [default_target] + targets
     endif
 
     set_variable(picolibcpp_noflash_ld_variable, get_variable(picolibcpp_noflash_ld_config_variable))
+
+    # Generate and install linux C and C++ linker scripts
+
+    picolibc_linux_ld_data = configuration_data()
+    # start with the regular C bits
+    picolibc_linux_ld_data.merge_from(picolibc_ld_data)
+    # linux also needs inittls
+    picolibc_linux_ld_data.set('INITTLS', '')
+    picolibc_linux_ld_data.set('DATATLS', ld_comment)
+    picolibc_linux_ld_data.set('LINUX', ld_comment)
+    # Don't discard frame information as that
+    # is necessary for debugging
+    picolibc_linux_ld_data.set('C', ld_comment)
+    picolibc_linux_ld_data.set('CPP', '')
+
+    # attributes for read-only data sections
+    picolibc_linux_ld_data.set('RODATA_MEM', 'ram')
+    picolibc_linux_ld_data.set('RODATA_AT', 'ram')
+    picolibc_linux_ld_data.set('RODATA_PHDR', 'ram')
+
+    picolibc_linux_ld_data.set('DATA_AT', 'ram')
+    picolibc_linux_ld_data.set('DATA_INIT_PHDR', 'ram')
+
+    # set up default memory layout
+    picolibc_linux_ld_data.set('DEFAULT_FLASH_ADDR', _default_linux_flash_addr)
+    picolibc_linux_ld_data.set('DEFAULT_FLASH_SIZE', _default_linux_flash_size)
+    picolibc_linux_ld_data.set('DEFAULT_RAM_ADDR', _default_linux_ram_addr)
+    picolibc_linux_ld_data.set('DEFAULT_RAM_SIZE', _default_linux_ram_size)
+    picolibc_linux_ld_data.set('DEFAULT_STACK_SIZE', _default_linux_stack_size)
+    picolibc_linux_ld_data.set('DEFAULT_ALIGNMENT', _default_linux_alignment)
+
+    if not is_variable(picolibc_linux_ld_config_variable)
+      set_variable(picolibc_linux_ld_config_variable,
+                   configure_file(input: 'picolibc.ld.in',
+                                  output: picolibc_linux_ld_file,
+                                  configuration: picolibc_linux_ld_data,
+                                  install: picolibc_ld_install and really_install,
+                                  install_dir: lib_dir))
+    endif
+
+    set_variable(picolibc_linux_ld_variable, get_variable(picolibc_linux_ld_config_variable))
+
+    # linux C++ version is just the linux version with CPP and C swapped
+    picolibcpp_linux_ld_data = configuration_data()
+    picolibcpp_linux_ld_data.merge_from(picolibc_linux_ld_data)
+    picolibcpp_linux_ld_data.set('CPP', '')
+    picolibcpp_linux_ld_data.set('C', ld_comment)
+
+    if not is_variable(picolibcpp_linux_ld_config_variable)
+      set_variable(picolibcpp_linux_ld_config_variable,
+                   configure_file(input: 'picolibc.ld.in',
+                                  output: picolibcpp_linux_ld_file,
+                                  configuration: picolibcpp_linux_ld_data,
+                                  install: picolibc_ld_install and really_install,
+                                  install_dir: lib_dir))
+    endif
+
+    set_variable(picolibcpp_linux_ld_variable, get_variable(picolibcpp_linux_ld_config_variable))
 
   endif
 endforeach
@@ -1512,6 +1477,14 @@ if not have_has_builtin
     ['builtin_ctz', '__builtin_ctz((unsigned int)42)', 'int'],
     ['builtin_ctzl', '__builtin_ctzl((unsigned long)42)', 'int'],
     ['builtin_ctzll', '__builtin_ctzll((unsigned long long)42)', 'int'],
+    ['builtin_stdc_bit_width', '__builtin_stdc_bit_width(42U)', 'unsigned int'],
+    ['builtin_clzg', '__builtin_clzg(42U, 8*sizeof(42U))', 'unsigned int'],
+    ['builtin_clz', '__builtin_clz(42U)', 'int'],
+    ['builtin_clzl', '__builtin_clzl(42UL)', 'int'],
+    ['builtin_constant_p', '__builtin_constant_p(1)', 'int'],
+    ['builtin_align_up', '__builtin_align_up((unsigned) 1, (unsigned) 8)', 'unsigned'],
+    ['builtin_align_down', '__builtin_align_down((unsigned) 15, (unsigned) 8)', 'unsigned'],
+    ['builtin_is_aligned', '__builtin_is_aligned((unsigned) 4, (unsigned) 2)', 'int'],
     ['builtin_copysignl', '__builtin_copysignl((long double)42, (long double) 42)', 'long double'],
     ['builtin_copysign', '__builtin_copysign(42, 42)', 'double'],
     ['builtin_isinfl', '__builtin_isinfl((long double)42)', 'int'],
@@ -1520,21 +1493,29 @@ if not have_has_builtin
     ['builtin_isnan', '__builtin_isnan((long double)42)', 'int'],
     ['builtin_finitel', '__builtin_finitel((long double)42)', 'int'],
     ['builtin_isfinite', '__builtin_isfinite((long double)42)', 'int'],
-    ['builtin_issignalingl', '__builtin_issignalingl((long double)42)', 'int'],
+    ['builtin_issignaling', '__builtin_issignaling((long double)42)', 'int'],
     ['builtin_mul_overflow', '__builtin_mul_overflow(1, 2, &u)', 'int'],
     ['builtin_add_overflow', '__builtin_add_overflow(1, 2, &u)', 'int'],
-    ['builtin_expect', '__builtin_expect(1 > 0)', 'int'],
+    ['builtin_expect', '__builtin_expect(1 > 0, 1)', 'int'],
+    ['builtin_unreachable', 'if (0) __builtin_unreachable();', 'void'],
   ]
 endif
 
 foreach builtin : builtins
-  builtin_template='''
-static int foo(@1@ i __attribute__((unused))) { return 0; }
-unsigned u;
-int main(void) { return foo(@0@); }
-'''
+  if builtin[2] == 'void'
+    builtin_template='''
+        int main(void) { @0@; return 0; }
+        '''
+  else
+    builtin_template='''
+        static int foo(@1@ i __attribute__((unused))) { return 0; }
+        unsigned u;
+        int main(void) { return foo(@0@); }
+        '''
+  endif
+
   builtin_code = builtin_template.format(builtin[1], builtin[2])
-  have_current_builtin = cc.links(builtin_code, name : 'test for __' + builtin[0], args: core_c_args)
+  have_current_builtin = cc.links(builtin_code, name : 'test for __' + builtin[0], args: c_args)
   if have_current_builtin
     conf_data.set10('__HAVE_' + builtin[0].to_upper(), have_current_builtin, description: 'The compiler supports __' + builtin[0])
   else
@@ -1554,16 +1535,20 @@ conf_data.set('__HAVE_CC_INHIBIT_LOOP_TO_LIBCALL',
 conf_data.set('__IO_LONG_LONG', io_long_long)
 conf_data.set('__IO_MINIMAL_LONG_LONG', minimal_io_long_long)
 conf_data.set('__FAST_BUFIO', fast_bufio)
+conf_data.set('__FSTAT_BUFSIZ', get_option('fstat-bufsiz'))
 conf_data.set('__IO_POS_ARGS', io_pos_args)
 conf_data.set('__IO_C99_FORMATS', io_c99_formats)
 conf_data.set('__IO_FLOAT_EXACT', io_float_exact)
 conf_data.set('__IO_PERCENT_B', io_percent_b)
 conf_data.set('__IO_LONG_DOUBLE', io_long_double)
 conf_data.set('__IO_WCHAR', io_wchar)
+conf_data.set('__STDIO_EXIT_FLUSH', get_option('stdio-exit-flush'))
 conf_data.set('__ASSERT_VERBOSE', get_option('assert-verbose'), description: 'assert() is verbose by default')
 conf_data.set('__SINGLE_THREAD', get_option('single-thread'), description: 'Disable multi-thread support')
 conf_data.set('__HAVE_FCNTL', get_option('have-fcntl'), description: 'System provides fcntl function')
-conf_data.set('__MALLOC_CLEAR_FREED', malloc_clear_freed)
+conf_data.set('__MALLOC_CLEAR_FREED', get_option('malloc-clear-freed'))
+conf_data.set('__MALLOC_SMALL_BUCKET', get_option('malloc-small-bucket'))
+conf_data.set('__MALLOC_ERROR_ABORT', get_option('malloc-error-abort'))
 if internal_heap != 0
   conf_data.set('__INTERNAL_HEAP', internal_heap)
 endif
@@ -1571,6 +1556,7 @@ conf_data.set('__IEEE_LIBM', not get_option('want-math-errno'), description: 'ma
 conf_data.set('__MATH_ERRNO', get_option('want-math-errno'), description: 'math library sets errno')
 conf_data.set('__PREFER_SIZE_OVER_SPEED', get_option('optimization') == 's', description: 'Optimize for space over speed')
 conf_data.set('__FAST_STRCMP', fast_strcmp, description: 'Always optimize strcmp for performance')
+conf_data.set('__STRCMP_PAIR', strcmp_pair, description: 'Use RISC-V paired-word strcmp')
 conf_data.set('__GLOBAL_ERRNO', get_option('newlib-global-errno'), description: 'use global errno variable')
 conf_data.set('__INIT_FINI_ARRAY', get_option('initfini-array'), description: 'Support INIT_ARRAY linker sections')
 conf_data.set('__INIT_FINI_FUNCS', get_option('initfini'), description: 'Support _init() and _fini() functions')
@@ -1593,6 +1579,19 @@ endif
 conf_data.set('__TINY_STDIO', true, description: 'Picolibc stdio comes from the avr C library')
 conf_data.set('__IO_DEFAULT', '\'@0@\''.format(format_default),
               description: 'The default printf and scanf variants')
+tmpdir = get_option('tmpdir')
+if tmpdir != '' and not tmpdir.endswith('/')
+  error('tmpdir must be empty or end with a path separator, got "@0@"'.format(tmpdir))
+endif
+if tmpdir != ''
+  strlen = find_program('scripts/strlen', required : true)
+  tmpdir_len_result = run_command(strlen, tmpdir, capture: true, check: true)
+  tmplen = tmpdir_len_result.stdout().to_int() + 8
+  conf_data.set('__P_tmpdir', '"@0@"'.format(tmpdir),
+                description: 'Directory prefix for temporary file names (P_tmpdir)')
+  conf_data.set('__L_tmpnam', tmplen,
+                description: 'Size of the tmpnam() buffer (L_tmpnam)')
+endif
 conf_data.set('__IO_SMALL_ULTOA',
               printf_small_ultoa,
               description: 'avoid software division in decimal conversion')
@@ -1727,24 +1726,6 @@ foreach inc_dir : inc_dirs + [meson.current_build_dir()]
   inc_args += '-I' + meson.current_source_dir() / inc_dir
 endforeach
 
-# We don't need '-fdata-sections' currently as there aren't any
-# files with data used in separate code paths. This works around
-# versions of gcc for RISC-V which have a bug that mis-names
-# initialized read-only data segments when -fdata-sections
-# is defined
-arguments = []
-if cc.has_argument('-ffunction-sections')
-  arguments += ['-ffunction-sections']
-endif
-
-if thread_local_storage
-  tls_arg = '-ftls-model=' + get_option('tls-model')
-  assert(cc.has_argument(tls_arg), 'Compiler does not support \'-ftls-model\'!')
-  arguments += [tls_arg]
-endif
-
-add_project_arguments(arguments, language: 'c')
-
 # libc will adjust this if supported
 ieeefp_funcs = false
 
@@ -1756,18 +1737,68 @@ has_semihost = false
 # arm compatible semihosting, enough to run arm semihost tests
 has_arm_semihost = false
 
-crt0_test = 'crt0_hosted'
+# Have any OS library. This disables
+# adding the fallback library source to libc
+has_os_library = false
+
+# libos/linux support
+has_os_linux = false
+
+# any POSIX support
+has_os_posix = false
+
+# File I/O support
+#
+# close, lseek, open, read, write
+#
+has_os_fileio = false
+
+# Process support
+#
+# execve, fork, waitpid
+#
+has_os_process = false
+
+# uid/gid support
+#
+# getegid, geteuid, getgid, getresgid, getresuid, setegid, seteuid,
+# setgid, setregeid, setresgid, setresuid, setreuid, setuid
+#
+has_os_id = false
+
+# libos/fallback split
+os_fallback_option = get_option('os-fallback')
+
+# leave the computation for libos in the 'linux' case
+if os_fallback_option == 'true'
+  has_os_fallback = true
+elif os_fallback_option == 'false'
+  has_os_fallback = false
+elif use_stdlib
+  has_os_fallback = false
+endif
+
+libfallback_name='os-fallback'
+libfallback_var=libfallback_name.underscorify()
 
 # some semihost needs bios to run the tests with qemu
 bios_bin = []
 
-# make sure to include semihost BEFORE picocrt!
-if enable_semihost
-  subdir('semihost')
+# make sure to include os BEFORE picocrt!
+
+subdir('libos')
+
+if enable_libdl
+  subdir('libdl')
+endif
+
+if use_stdlib or has_os_linux or has_os_fallback
+  has_os_library = true
 endif
 
 conf_data.set('__SEMIHOST', has_semihost, description: 'Semihost APIs supported')
 conf_data.set('__ARM_SEMIHOST', has_arm_semihost, description: 'ARM Semihost APIs supported')
+conf_data.set('__ARM_SEMIHOST_USE_HLT', use_hlt_semihosting, description: 'ARM semihost uses hlt on ARMv8 targets')
 
 # By default, tests don't require any special arguments
 
@@ -1790,24 +1821,75 @@ if get_option('test-long-double')
   native_c_args += ['-D_TEST_LONG_DOUBLE']
 endif
 
-# Meson version 0.53.2 doesn't check for the skip_sanity_check value
-# before attempting to run test fragments during configuration. That
-# means the exe_wrapper value needs to handle being run at that
-# point. To support this, the exe_wrapper becomes a script which
-# checks for a environment variable (PICOLIBC_TEST) and exits
-# indicating success if that is not present.
-#
-# This was fixed in meson version 0.54.2, so this can be removed from
-# here and the sample cross scripts once picolibc requires a version
-# of meson newer than that.
+native_c_args += ['-Wl,--no-fatal-warnings']
 
-test_env = environment({'PICOLIBC_TEST' : '1'})
+test_env = environment()
 test_env.prepend('PATH', meson.current_source_dir() / 'scripts')
 
-if has_semihost
-  # RAM-only targets (like MOS 6502) should use the noflash linker script
-  ram_only = meson.get_cross_property('ram_only', false)
+#
+# Compute crt0, oslib and linker script for tests
+#
+# When unspecified, first try semihost, then linux, then hosted
+#
 
+crt0_test_variant = get_option('crt0-test')
+oslib_test_variant = get_option('oslib-test')
+linkerscript_test_variant = get_option('linkerscript-test')
+
+if has_semihost
+  if crt0_test_variant == ''
+    crt0_test_variant = 'semihost'
+  endif
+  if oslib_test_variant == ''
+    oslib_test_variant = 'semihost'
+  endif
+elif has_os_linux
+  if crt0_test_variant == ''
+    crt0_test_variant = 'linux'
+  endif
+  if oslib_test_variant == ''
+    oslib_test_variant = 'linux'
+  endif
+  if linkerscript_test_variant == ''
+    linkerscript_test_variant = 'linux'
+  endif
+else
+  if crt0_test_variant == ''
+    crt0_test_variant = 'hosted'
+  endif
+  if crt0_test_variant == 'semihost' or oslib_test_variant == 'semihost'
+    error('semihost test variant unsupported')
+  endif
+  if crt0_test_variant == 'linux' or oslib_test_variant == 'linux'
+    error('linux test variant unsupported')
+  endif
+endif
+
+if crt0_test_variant == 'semihost_cfi'
+  test_env.set('QEMU_ADD_ZICFI', 'true')
+endif
+
+crt0_test = 'crt0_' + crt0_test_variant
+
+oslib_test = ''
+if oslib_test_variant != ''
+  oslib_test = 'lib_' + oslib_test_variant
+endif
+
+if linkerscript_test_variant != ''
+  linkerscript_test = 'picolibc_' + linkerscript_test_variant
+else
+  linkerscript_test = 'picolibc'
+endif
+
+# RAM-only targets (like MOS 6502) should use the noflash linker script
+ram_only = meson.get_external_property('ram_only', false)
+
+# if we're using our own OS lib, then set all of the link
+# parameters. Otherwise, we're using the native C library for OS
+# functions so we don't need this.
+
+if oslib_test != ''
   foreach params : [default_target] + targets
 
     target = params['name']
@@ -1816,10 +1898,12 @@ if has_semihost
     if target == 'default-target'
       test_link_args_variable = 'test_link_args'
       test_link_args_noflash_variable = 'test_link_args_noflash'
+      test_link_args_linux_variable = 'test_link_args_linux'
       test_linker_files_variable = 'test_linker_files'
       test_link_depends_variable = 'test_link_depends'
       test_link_depends_noflash_variable = 'test_link_depends_noflash'
-      picolibc_ld_value = ram_only ? picolibc_noflash_ld : picolibc_ld
+      test_link_depends_linux_variable = 'test_link_depends_linux'
+      picolibc_ld_value = ram_only ? picolibc_noflash_ld : get_variable(linkerscript_test + '_ld')
 
       if thread_local_storage
         test_inittls_link_args_variable = 'test_inittls_link_args'
@@ -1831,13 +1915,17 @@ if has_semihost
     else
       test_link_args_variable = 'test_link_args' + target
       test_link_args_noflash_variable = 'test_link_args_noflash' + target
+      test_link_args_linux_variable = 'test_link_args_linux' + target
       test_linker_files_variable = 'test_linker_files_' + target
       test_link_depends_variable = 'test_link_depends' + target
       test_link_depends_noflash_variable = 'test_link_depends_noflash' + target
+      test_link_depends_linux_variable = 'test_link_depends_linux' + target
+
       if ram_only
         picolibc_ld_value = get_variable('picolibc' + target + '_noflash_ld', picolibc_noflash_ld)
       else
-        picolibc_ld_value = get_variable('picolibc' + target + '_ld', picolibc_ld)
+        picolibc_ld_value = get_variable(linkerscript_test + target + '_ld',
+                                         get_variable(linkerscript_test + '_ld'))
       endif
 
       if thread_local_storage
@@ -1862,7 +1950,7 @@ if has_semihost
     endif
 
     set_variable(test_link_args_variable,
-                 additional_libs_list + 
+                 additional_libs_list +
 		 test_link_args_base +
                  ['-nostdlib', '-T', picolibc_ld_string])
 
@@ -1873,7 +1961,7 @@ if has_semihost
 
     if thread_local_storage
       set_variable(test_inittls_link_args_variable,
-                   additional_libs_list + 
+                   additional_libs_list +
 		   test_link_args_base +
                    ['-nostdlib', '-T', picolibc_inittls_ld_string])
 
@@ -1899,7 +1987,7 @@ if has_semihost
                  ['-nostdlib', '-T', picolibc_noflash_ld_string])
     set_variable(test_link_depends_noflash_variable, [picolibc_noflash_ld_value])
   endforeach
-  test_noflash = true
+  test_noflash = linkerscript_test_variant == '' and crt0_test_variant != 'semihost_smrnmi' and crt0_test_variant != 'semihost_cfi'
 else
   test_link_args = test_link_args_base
   test_link_depends = []
@@ -1913,7 +2001,7 @@ endif
 
 # Test filtering: when set, only build tests in this list
 # Used by memory-constrained targets (e.g., MOS 6502) to skip tests that don't fit
-allowed_tests = meson.get_cross_property('allowed_tests', [])
+allowed_tests = meson.get_external_property('allowed_tests', [])
 
 # Build the C library
 
@@ -1985,7 +2073,6 @@ endforeach
 
 if enable_tests
   subdir('test')
-  subdir('libm/test')
 endif
 
 subdir('empty-libs')
@@ -1996,6 +2083,279 @@ configure_file(output : 'picolibc.h',
 	       configuration: conf_data,
 	       install_dir: include_dir,
 	       install: really_install)
+
+#
+# Construct picolibc.specs (and picolibcpp.specs)
+#
+
+specs_extra = ''
+specs_extra_list = meson.get_external_property('specs_extra', [])
+if specs_extra_list != []
+  specs_extra = '\n' + '\n'.join(specs_extra_list)
+endif
+
+# Handle old-style printf/scanf selection mechanism in the specs file
+
+specs_printf = ''
+if printf_aliases
+  specs_printf=('%{DPICOLIBC_DOUBLE_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__d_vfprintf}' +
+		' %{DPICOLIBC_DOUBLE_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__d_vfscanf}' +
+                ' %{DPICOLIBC_FLOAT_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__f_vfprintf}' +
+		' %{DPICOLIBC_FLOAT_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__f_vfscanf}' +
+		' %{DPICOLIBC_LONG_LONG_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__l_vfprintf}' +
+		' %{DPICOLIBC_LONG_LONG_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__l_vfscanf}' +
+		' %{DPICOLIBC_INTEGER_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__i_vfprintf}' +
+		' %{DPICOLIBC_INTEGER_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__i_vfscanf}' +
+		' %{DPICOLIBC_MINIMAL_PRINTF_SCANF:--defsym=@0@vfprintf=@0@__m_vfprintf}' +
+		' %{DPICOLIBC_MINIMAL_PRINTF_SCANF:--defsym=@0@vfscanf=@0@__m_vfscanf}').format(global_prefix)
+endif
+
+crt0_default = meson.get_external_property('crt0_default', 'crt0')
+
+if system_libc
+  specs_isystem = ''
+  specs_libpath = ''
+  specs_libgccpath = ''
+  # The '%s' here asks gcc to search for this file in the 'usual' library path
+  specs_startfile = '%{-crt0=*:crt0-%*%O%s; :@0@%O%s}'.format(crt0_default)
+else
+
+  # Note that this value does *not* include the trailing %s which
+  # means we have to compute the full path to the file
+  crt0_expr = '%{-crt0=*:crt0-%*%O; :@0@%O}'.format(crt0_default)
+
+  #
+  # Construct path values for specs file
+  #
+  # Each of these needs to handle --picolibc-prefix and
+  # --picolibc-buildtype options, system-root vs absolute paths and
+  # multilib stuff. That makes this all unreasonably complicated.
+  #
+  # Each option is computed in three parts, the 'prefix' value
+  # (corresponding to --picolibc-prefix), the 'buildtype' value
+  # (corresponding to --picolibc-buildtype) and the 'gen' value (for
+  # when neither of these options is specifed).
+  #
+  # Because 'getenv' appends a space afterwards in GCC spec files, the
+  # entire final path elements must be specified inside the parens;
+  # e.g. %:getenv(FOO a/b/c) instead of %:getenv(FOO)/a/b/c. That means
+  # we use the specs_prefix_format value computed above to build paths
+  # instead of simple concatenation
+  #
+
+  #
+  # How to format each of the three option-selected
+  # values
+  #
+  picolibc_prefix_format = '-picolibc-prefix=*:@0@'
+  picolibc_buildtype_format = '-picolibc-buildtype=*:@0@'
+  gen_format = '@0@'
+
+  #
+  # How to glue the three options together
+  #
+  specs_option_format = '%{@0@; @1@; :@2@}'
+
+  #
+  # Build the -isystem value
+  #
+
+  prefix_include_dir = '%*/@0@/'.format(get_option('includedir'))
+  isystem_prefix = picolibc_prefix_format.format(prefix_include_dir)
+
+  buildtype_include_dir = specs_prefix_format.format(get_option('includedir') / '%*')
+  isystem_buildtype = picolibc_buildtype_format.format(buildtype_include_dir)
+
+  gen_include_dir = specs_prefix_format.format(get_option('includedir'))
+  isystem_gen = gen_format.format(gen_include_dir)
+
+  specs_isystem = '-isystem ' + specs_option_format.format(isystem_prefix, isystem_buildtype, isystem_gen)
+
+  gcc_dumpmachine = run_command(cc.cmd_array() + ['-dumpmachine'], check : true).stdout().split('\n')[0]
+
+  cxxconfig_path_postfix = '..' / gcc_dumpmachine / 'include' / 'c++' / '%(version)' / gcc_dumpmachine / '%M'
+  cxxconfig_isystem_prefix = isystem_prefix / cxxconfig_path_postfix
+  cxxconfig_isystem_buildtype = isystem_buildtype / cxxconfig_path_postfix
+  cxxconfig_isystem_gen = isystem_gen / cxxconfig_path_postfix
+
+  specs_isystem = specs_isystem + ' -isystem ' + specs_option_format.format(cxxconfig_isystem_prefix, cxxconfig_isystem_buildtype, cxxconfig_isystem_gen)
+
+  #
+  # Build the non-multilib -L value
+  #
+
+  prefix_lib_dir = '%*/@0@'.format(get_option('libdir'))
+  lib_prefix = picolibc_prefix_format.format(prefix_lib_dir)
+
+  buildtype_lib_dir = specs_prefix_format.format(get_option('libdir') / '%*')
+  lib_buildtype = picolibc_buildtype_format.format(buildtype_lib_dir)
+
+  gen_lib_dir = specs_prefix_format.format(get_option('libdir'))
+  lib_gen = gen_format.format(gen_lib_dir)
+
+  specs_libpath = '-L' + specs_option_format.format(lib_prefix, lib_buildtype, lib_gen)
+
+  #
+  # Build the non-multilib libgcc -L value
+  #
+
+  libgcc_dir_option = get_option('libgccdir')
+  if libgcc_dir_option == ''
+    libgcc_dir = get_option('includedir') / '..' / 'lib' / 'gcc' / gcc_dumpmachine / '%(version)'
+  else
+    libgcc_dir = libgcc_dir_option / '%(version)'
+  endif
+  prefix_libgcc_dir = '%*/@0@'.format(libgcc_dir)
+  libgcc_prefix = picolibc_prefix_format.format(prefix_libgcc_dir)
+
+  buildtype_libgcc_dir = specs_prefix_format.format(libgcc_dir / '%*')
+  libgcc_buildtype = picolibc_buildtype_format.format(buildtype_libgcc_dir)
+
+  gen_libgcc_dir = specs_prefix_format.format(libgcc_dir)
+  libgcc_gen = gen_format.format(gen_libgcc_dir)
+
+  specs_libgccpath = '-L' + specs_option_format.format(libgcc_prefix, libgcc_buildtype, libgcc_gen)
+
+  #
+  # Build the non-multilib *startfile options
+  #
+
+  prefix_crt0_path = '%*/@0@'.format(get_option('libdir')) / crt0_expr
+  crt0_prefix = picolibc_prefix_format.format(prefix_crt0_path)
+
+  buildtype_crt0_path = specs_prefix_format.format(get_option('libdir') / '%*' / crt0_expr)
+  crt0_buildtype = picolibc_buildtype_format.format(buildtype_crt0_path)
+
+  gen_crt0_path = specs_prefix_format.format(get_option('libdir') / crt0_expr)
+  crt0_gen = gen_format.format(gen_crt0_path)
+
+  #
+  # Now build multilib versions of the -L and *startfile values
+  #
+  if enable_multilib
+
+    #
+    # Build the multilib -L value
+    #
+    prefix_multilib_dir = '%*/@0@'.format(get_option('libdir') / '%M')
+    multilib_prefix = picolibc_prefix_format.format(prefix_multilib_dir)
+
+    buildtype_multilib_dir = specs_prefix_format.format(get_option('libdir') / '%*/%M')
+    multilib_buildtype = picolibc_buildtype_format.format(buildtype_multilib_dir)
+
+    gen_multilib_dir = specs_prefix_format.format(get_option('libdir') / '%M')
+    multilib_gen = gen_format.format(gen_multilib_dir)
+
+    specs_multilibpath = '-L' + specs_option_format.format(multilib_prefix, multilib_buildtype, multilib_gen)
+
+    #
+    # Build the multilib libgcc -L value
+    #
+    prefix_multilibgcc_dir = '%*/@0@'.format(libgcc_dir / '%M')
+    multilibgcc_prefix = picolibc_prefix_format.format(prefix_multilibgcc_dir)
+
+    buildtype_multilibgcc_dir = specs_prefix_format.format(libgcc_dir / '%*/%M')
+    multilibgcc_buildtype = picolibc_buildtype_format.format(buildtype_multilibgcc_dir)
+
+    gen_multilibgcc_dir = specs_prefix_format.format(libgcc_dir / '%M')
+    multilibgcc_gen = gen_format.format(gen_multilibgcc_dir)
+
+    specs_multilibgccpath = '-L' + specs_option_format.format(multilibgcc_prefix, multilibgcc_buildtype, multilibgcc_gen)
+
+    #
+    # Prepend the multilib -L option to the non-multilib option
+    #
+    specs_libpath = specs_multilibpath + ' ' + specs_libpath
+    specs_libgccpath = specs_multilibgccpath + ' ' + specs_libgccpath
+
+    #
+    # Build the multilib *startfile options
+    #
+    prefix_multilib_crt0_path = '%*/@0@'.format(get_option('libdir')) / '%M' / crt0_expr
+    crt0_prefix = picolibc_prefix_format.format(prefix_multilib_crt0_path)
+
+    buildtype_multilib_crt0_path = specs_prefix_format.format(get_option('libdir') / '%*/%M' / crt0_expr)
+    crt0_buildtype = picolibc_buildtype_format.format(buildtype_multilib_crt0_path)
+
+    gen_multilib_crt0_path = specs_prefix_format.format(get_option('libdir') / '%M' / crt0_expr)
+    crt0_gen = gen_format.format(gen_multilib_crt0_path)
+  endif
+
+  #
+  # Construct the *startfile value from the options computed
+  # above. As there's only one value, it's either the
+  # multilib path or the non-multilib path
+  #
+  specs_startfile = specs_option_format.format(crt0_prefix, crt0_buildtype, crt0_gen)
+
+endif
+
+oslib_spec='%{-oslib=*:-l%*}'
+oslib_default = meson.get_external_property('oslib_default', '')
+if oslib_default != ''
+  oslib_spec+='%{!-oslib:-l@0@}'.format(oslib_default)
+endif
+
+if has_os_fallback
+  oslib_spec+=' -l@0@'.format(libfallback_name)
+endif
+
+specs_data = configuration_data()
+specs_data.set('SPECS_ISYSTEM', specs_isystem)
+specs_data.set('SPECS_LIBGCC_PATH', specs_libgccpath)
+specs_data.set('SPECS_LIBPATH', specs_libpath)
+specs_data.set('SPECS_STARTFILE', specs_startfile)
+specs_data.set('TLSMODEL', tls_model_spec)
+specs_data.set('STACKGUARD', stack_guard_spec)
+specs_data.set('LINK_SPEC', meson.get_external_property('link_spec', ''))
+specs_data.set('OSLIB_SPEC', oslib_spec)
+specs_data.set('CC1_SPEC', meson.get_external_property('cc1_spec', ''))
+specs_data.set('CC1PLUS_SPEC', meson.get_external_property('cc1plus_spec', ''))
+specs_data.set('ADDITIONAL_LIBS', additional_libs)
+specs_data.set('SPECS_EXTRA', specs_extra)
+specs_data.set('SPECS_PRINTF', specs_printf)
+specs_data.set('PREFIX', global_prefix)
+
+# Create C and C++ specific specs data,
+# that includes setting the correct linker script
+# and adding the C++ startup/shutdown files
+
+specs_c_data = specs_data
+
+picolibc_ld = meson.get_external_property('linkerscript_default_c', 'picolibc.ld')
+specs_c_data.set('PICOLIBC_LD', picolibc_ld)
+specs_c_data.set('CRTBEGIN', '')
+specs_c_data.set('CRTEND', '')
+
+specs_cpp_data = specs_data
+
+picolibcpp_ld = meson.get_external_property('linkerscript_default_cpp', 'picolibcpp.ld')
+specs_cpp_data.set('PICOLIBC_LD', picolibcpp_ld)
+specs_cpp_data.set('CRTBEGIN', 'crtbegin%O%s')
+specs_cpp_data.set('CRTEND', 'crtend%O%s')
+
+if specs_install and really_install
+
+  compiler_picolibc_native = run_command(cc.cmd_array() + ['-v'], check : false).stderr().contains('with-picolibc')
+
+  if compiler_picolibc_native
+    picolibc_specs_in = 'picolibc-native.specs.in'
+  else
+    picolibc_specs_in = 'picolibc.specs.in'
+  endif
+
+  configure_file(input: picolibc_specs_in,
+	         output: 'picolibc.specs',
+	         configuration: specs_c_data,
+	         install_dir: specs_dir,
+	         install: specs_install and really_install)
+
+  configure_file(input: picolibc_specs_in,
+	         output: 'picolibcpp.specs',
+	         configuration: specs_cpp_data,
+	         install_dir: specs_dir,
+	         install: specs_install and really_install)
+endif
 
 # Usage as an embedded subproject:
 # If picolibc is embedded into the source as a subproject,

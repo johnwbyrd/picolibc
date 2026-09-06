@@ -33,7 +33,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "stdio_private.h"
+#include "local-stdio.h"
 
 FILE *
 freopen(const char *pathname, const char *mode, FILE *stream)
@@ -43,6 +43,7 @@ freopen(const char *pathname, const char *mode, FILE *stream)
     int                  fd;
     int                  stdio_flags;
     int                  open_flags;
+    int                  buf_size;
 
     __flockfile(stream);
     /* Can't reopen FILEs which aren't buffered */
@@ -53,15 +54,20 @@ freopen(const char *pathname, const char *mode, FILE *stream)
     if (stdio_flags == 0)
         goto exit;
 
-    fd = open(pathname, open_flags, 0666);
-    if (fd < 0)
-        goto exit;
+    if (pathname != NULL) {
+        fd = open(pathname, open_flags, 0666);
+        if (fd < 0)
+            goto exit;
+    } else
+        fd = (int)(intptr_t)(pf->ptr);
 
-    fflush(stream);
+    (void)__fflush_locked(stream);
 
     __bufio_lock(stream);
-    close((int)(intptr_t)(pf->ptr));
-    (void)__atomic_exchange_ungetc(&stream->unget, 0);
+
+    if (pathname != NULL)
+        close((int)(intptr_t)(pf->ptr));
+
     stream->flags = (stream->flags & ~(__SRD | __SWR | __SERR | __SEOF)) | stdio_flags;
     pf->pos = 0;
     pf->ptr = (void *)(intptr_t)(fd);
@@ -71,6 +77,11 @@ freopen(const char *pathname, const char *mode, FILE *stream)
     pf->write_int = write;
     pf->lseek_int = lseek;
     pf->close_int = close;
+
+    /* Reset buffer mode and size */
+    buf_size = bufio_get_buf_size(fd);
+    if (buf_size != pf->size || (pf->bflags & __BLBF))
+        (pf->xfile.setvbuf ? pf->xfile.setvbuf : __bufio_setvbuf)(stream, NULL, _IOFBF, buf_size);
 
     ret = stream;
     __bufio_unlock(stream);

@@ -3,22 +3,31 @@ LINUX_DEPS=\
 	head \
 	variants-cmake \
 	variants \
-	targets-cmake-linux \
 	steps-head \
 	steps-cmake \
 	steps-minsize \
 	steps-release
 
-all: linux.yml zephyr.yml native.yml # coreboot.yml
+all: linux.yml linux-arm.yml zephyr.yml native.yml
 
 linux.yml: $(LINUX_DEPS)
 	./make-workflow > $@
+
+LINUX_ARM_DEPS=\
+	make-workflow-arm \
+	head-arm \
+	variants \
+	steps-head \
+	steps-minsize \
+	steps-release
+
+linux-arm.yml: $(LINUX_ARM_DEPS)
+	./make-workflow-arm > $@
 
 ZEPHYR_DEPS=\
 	make-workflow-zephyr \
 	head-zephyr \
 	variants \
-	targets-zephyr \
 	steps-head \
 	steps-minsize \
 	steps-release
@@ -30,7 +39,6 @@ NATIVE_DEPS=\
 	make-workflow \
 	head-native \
 	variants \
-	targets-native \
 	steps-head \
 	steps-minsize \
 	steps-release
@@ -42,7 +50,6 @@ COREBOOT_DEPS=\
 	make-workflow-coreboot \
 	head-coreboot \
 	variants \
-	targets-coreboot \
 	steps-head \
 	steps-minsize \
 	steps-release

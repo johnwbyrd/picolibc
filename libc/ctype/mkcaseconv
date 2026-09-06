@@ -9,6 +9,8 @@ if [ -r UnicodeData.txt ]
 then	UnicodeData=UnicodeData.txt
 elif [ -r /usr/share/unicode/ucd/UnicodeData.txt ]
 then	UnicodeData=/usr/share/unicode/ucd/UnicodeData.txt
+elif [ -r /usr/share/unicode/UnicodeData.txt ]
+then	UnicodeData=/usr/share/unicode/UnicodeData.txt
 else	echo UnicodeData.txt not found >&2
 	exit 1
 fi

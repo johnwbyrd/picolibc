@@ -37,16 +37,19 @@
  *  high.  Then merge with neighbor chunks if adjacent.
  */
 
-void
+void __disable_sanitizer
 __malloc_free(void *free_p)
 {
     chunk_t  *p_to_free;
-    chunk_t **p, *r;
+    chunk_t **p, *c;
 
     if (free_p == NULL)
         return;
 
     p_to_free = ptr_to_chunk(free_p);
+
+    if (!_check_busy(p_to_free, "free: double free\n"))
+        return;
 
 #ifdef __MALLOC_CLEAR_FREED
     memset(p_to_free, 0, chunk_usable(p_to_free));
@@ -55,17 +58,39 @@ __malloc_free(void *free_p)
 #endif
 
 #if MALLOC_DEBUG
-    __malloc_validate_block(p_to_free);
+    __malloc_validate_chunk(p_to_free);
 #endif
+
+    _mark_free(p_to_free);
 
     MALLOC_LOCK;
 
-    for (p = &__malloc_free_list; (r = *p) != NULL; p = &r->next) {
+#if __MALLOC_SMALL_BUCKET
+    size_t s = _size(p_to_free);
+    if (s <= MALLOC_MAX_BUCKET) {
+        unsigned bucket = BUCKET_NUM(s);
+
+        /*
+         * The size might not exactly match the bucket if p_to_free is
+         * spacing out a memalign chunk. In that case, dump it into
+         * the general allocation chain where it can get merged with
+         * the adjacent blocks when those are freed.
+         */
+        if (s == BUCKET_SIZE(bucket)) {
+            p = &__malloc_bucket_list[bucket];
+            p_to_free->next = *p;
+            *p = p_to_free;
+            goto unlock;
+        }
+    }
+#endif
+
+    for (p = &__malloc_free_list; (c = *p) != NULL; p = &c->next) {
         /* Insert in address order */
-        if (p_to_free <= r) {
+        if (p_to_free <= c) {
 
             /* Check for double free */
-            if (p_to_free == r) {
+            if (p_to_free == c) {
                 errno = ENOMEM;
                 goto unlock;
             }
@@ -74,33 +99,57 @@ __malloc_free(void *free_p)
         }
 
         /* Merge blocks together */
-        if (chunk_after(r) == p_to_free) {
-            *_size_ref(r) += _size(p_to_free);
-            p_to_free = r;
-            r = r->next;
+        if (chunk_after(c) == p_to_free) {
+            *_size_ref(c) += _size(p_to_free);
+            p_to_free = c;
+            c = c->next;
             goto no_insert;
         }
     }
 
-    p_to_free->next = r;
+    p_to_free->next = c;
     *p = p_to_free;
 
 no_insert:
 
     /* Merge blocks together */
-    if (chunk_after(p_to_free) == r) {
+    if (chunk_after(p_to_free) == c) {
 #ifdef __GNUCLIKE_PRAGMA_DIAGNOSTIC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Wunknown-warning-option"
 #pragma GCC diagnostic ignored "-Wanalyzer-null-dereference"
 #endif
-        *_size_ref(p_to_free) += _size(r);
+        *_size_ref(p_to_free) += _size(c);
 #ifdef __GNUCLIKE_PRAGMA_DIAGNOSTIC
 #pragma GCC diagnostic pop
 #endif
-        p_to_free->next = r->next;
+        p_to_free->next = c->next;
     }
+
+#if __MALLOC_SMALL_BUCKET
+    s = _size(p_to_free);
+    if (s <= MALLOC_MAX_BUCKET) {
+        unsigned bucket = BUCKET_NUM(s);
+
+#ifdef MALLOC_DEBUG
+        assert(bucket < NUM_BUCKET_POT);
+#endif
+        /* Move from general free list to bucket */
+        if (s == BUCKET_SIZE(bucket)) {
+#ifdef MALLOC_DEBUG
+            assert(*p == p_to_free);
+#endif
+
+            /* unlink from general list */
+            *p = p_to_free->next;
+
+            /* link to bucket list */
+            p_to_free->next = __malloc_bucket_list[bucket];
+            __malloc_bucket_list[bucket] = p_to_free;
+        }
+    }
+#endif
 
 unlock:
     MALLOC_UNLOCK;

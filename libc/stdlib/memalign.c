@@ -55,19 +55,19 @@ memalign(size_t align, size_t s)
         return NULL;
     }
 
-    align = MAX(align, MALLOC_MINSIZE);
+    align = MAX(align, UP_POT(MALLOC_CHUNK_MIN));
 
-    if (s > MALLOC_MAXSIZE - align) {
+    if (align > MALLOC_ALLOC_MAX || s > MALLOC_ALLOC_MAX - align) {
         errno = ENOMEM;
         return NULL;
     }
 
-    s = __align_up(MAX(s, 1), MALLOC_CHUNK_ALIGN);
+    s = chunk_size(s);
 
     /* Make sure there's space to align the allocation and split
      * off chunk_t from the front
      */
-    size_with_padding = s + align + MALLOC_MINSIZE;
+    size_with_padding = s + align + MALLOC_CHUNK_MIN;
 
     allocated = __malloc_malloc(size_with_padding);
     if (allocated == NULL)
@@ -81,7 +81,7 @@ memalign(size_t align, size_t s)
 
     /* Split off the front piece if necessary */
     if (offset) {
-        if (offset < MALLOC_MINSIZE) {
+        if (offset < MALLOC_CHUNK_MIN) {
             aligned_p += align;
             offset += align;
         }
@@ -89,20 +89,32 @@ memalign(size_t align, size_t s)
         chunk_t *new_chunk_p = ptr_to_chunk(aligned_p);
         _set_size(new_chunk_p, _size(chunk_p) - offset);
 
+        /*
+         * This may create a free chunk smaller than MALLOC_MAX_BUCKET
+         * but which is not exactly the size of a bucket. Free places this
+         * in the general list instead of the per-bucket list where it
+         * will never be allocated, but where it will merge with adjacent
+         * blocks when freed.
+         */
         make_free_chunk(chunk_p, offset);
 
         chunk_p = new_chunk_p;
     }
 
-    offset = _size(chunk_p) - chunk_size(s);
+    offset = _size(chunk_p) - s;
 
     /* Split off the back piece if large enough */
-    if (offset >= MALLOC_MINSIZE) {
+    if (offset >= MALLOC_CHUNK_MIN) {
+#if __MALLOC_SMALL_BUCKET
+        if (offset <= MALLOC_MAX_BUCKET)
+            offset = BUCKET_SIZE(BUCKET_FLOOR(offset));
+#endif
         *_size_ref(chunk_p) -= offset;
 
         make_free_chunk(chunk_after(chunk_p), offset);
     }
-    return aligned_p;
+
+    return chunk_to_ptr(chunk_p);
 }
 
 #ifdef __strong_reference

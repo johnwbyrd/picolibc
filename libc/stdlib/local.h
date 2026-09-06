@@ -8,14 +8,23 @@ All rights reserved.
 #define _LOCAL_H_
 
 #include <stdint.h>
+#include <stddef.h>
 
-char *_gcvt(double, int, char *, char, int);
+char           *_gcvt(double, int, char *, char, int);
+
+extern char   **environ;
+
+char           *__findenv(const char *name, size_t *offset);
+
+extern uint32_t __environ_sequence;
 
 #include "locale_private.h"
 
 #ifndef __machine_mbstate_t_defined
 #include <wchar.h>
 #endif
+
+extern __THREAD_LOCAL uint64_t _rand_next;
 
 #ifdef __AVR__
 typedef unsigned int uwchar_t;

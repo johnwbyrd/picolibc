@@ -1,5 +1,6 @@
-#!/bin/sh
+#!/bin/bash
 
+PICOLIBC_PREFIX=/opt/picolibc-test
 PICOLIBC_DIR=/build/picolibc
 GLIBC_DIR=/build/glibc
 
@@ -8,69 +9,55 @@ set -e
 #test=echo
 
 options="-Dwant-math-errno=true -Dio-long-double=true -Dwerror=true -Dmb-capable=true -Dmb-extended-charsets=true -Dsanitize=undefined"
-minoptions="$options"
-reloptions="$options --buildtype=release -Ddebug=true -Dbuild-type-subdir=release"
+stdoptions="$options --buildtype=release -Ddebug=true --prefix=$PICOLIBC_PREFIX"
 
-for arch in arm riscv; do
+declare -a ARCHS
 
-    DIR=$PICOLIBC_DIR/builds/build-$arch-minsize
+ARCHS=(x86_64-linux-gnu i686-linux-gnu aarch64 arm riscv)
 
+for arch in "${ARCHS[@]}"; do
+
+    DIR=$PICOLIBC_DIR/builds/build-$arch
+
+    echo '###################################'
+
+    echo '####' rm -rf $DIR
     $test rm -rf $DIR
+
+    echo '####' mkdir -p $DIR
     $test mkdir -p $DIR
+
+    echo '####' cd $DIR
     $test cd $DIR
 
-    echo '###################################'
-    echo '####' ../../scripts/do-$arch-configure $options
-    echo '###################################'
-
-    $test ../../scripts/do-$arch-configure $options
-    $test ninja test install
-
-    DIR=$PICOLIBC_DIR/builds/build-$arch-release
-
-    $test rm -rf $DIR
-    $test mkdir -p $DIR
-    $test cd $DIR
-
-    echo '###################################'
-    echo '####' ../../scripts/do-$arch-configure $reloptions
+    echo '####' ../../scripts/do-$arch-configure $stdoptions
     echo '###################################'
 
-    $test ../../scripts/do-$arch-configure $reloptions
-    $test ninja test install
+
+    $test ../../scripts/do-$arch-configure $stdoptions
+
+    $test ninja
+    $test meson test -t 10
+    $test ninja install
 
 done
 
 options="-Dwerror=true"
-minoptions="$options --buildtype=minsize"
-reloptions="$options --buildtype=release -Ddebug=true -Dpicolibc-buildtype=release"
+stdoptions="$options --buildtype=release -Ddebug=true"
 
-for arch in arm riscv; do
+for arch in "${ARCHS[@]}"; do
 
-    DIR=$GLIBC_DIR/builds/build-$arch-minsize
-
-    $test rm -rf $DIR
-    $test mkdir -p $DIR
-    $test cd $DIR
-
-    echo '###################################'
-    echo '####' ../../picolibc/do-$arch-configure $minoptions
-    echo '###################################'
-
-    $test ../../picolibc/do-$arch-configure $minoptions
-    $test ninja test
-
-    DIR=$GLIBC_DIR/builds/build-$arch-release
+    DIR=$GLIBC_DIR/builds/build-$arch
 
     $test rm -rf $DIR
     $test mkdir -p $DIR
     $test cd $DIR
 
     echo '###################################'
-    echo '####' ../../picolibc/do-$arch-configure $reloptions
+    echo '####' ../../picolibc/do-$arch-configure $stdoptions
     echo '###################################'
 
-    $test ../../picolibc/do-$arch-configure $reloptions
+    $test ../../picolibc/do-$arch-configure $stdoptions
     $test ninja test
 
 done

@@ -35,7 +35,10 @@
 
 set(tests
   test-fmemopen
+  test-fopencookie
+  test-open_memstream
   test-funopen
+  test-fwrite-fast-path
   test-put
   test-printf
   test-printf-scanf
@@ -46,14 +49,6 @@ set(tests
   test-vsnprintf-s
   )
 
-set(tests_fail
-  )
-
 foreach(test IN LISTS tests)
   picolibc_test(${test})
-endforeach()
-
-foreach(test IN LISTS tests_fail)
-  picolibc_test(${test})
-  set_tests_properties(${test} PROPERTIES WILL_FAIL ON)
 endforeach()

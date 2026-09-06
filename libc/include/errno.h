@@ -1,7 +1,6 @@
 /*
 Copyright (c) 1991, 1993
 The Regents of the University of California.  All rights reserved.
-c) UNIX System Laboratories, Inc.
 All or some portions of this file are derived from material licensed
 to the University of California by American Telephone and Telegraph
 Co. or Unix System Laboratories, Inc. and are reproduced herein with
@@ -49,6 +48,28 @@ typedef __errno_t errno_t;
 #endif
 #endif
 
+_BEGIN_STD_C
+
+#if __GNU_VISIBLE
+char *_user_strerror(int errnum, int internal, int *errptr) __picolibc_export;
+#endif
+
+#ifdef __GLOBAL_ERRNO
+#define __THREAD_LOCAL_ERRNO
+#else
+#define __THREAD_LOCAL_ERRNO __THREAD_LOCAL
+#endif
+
+#ifdef __PICOLIBC_ERRNO_FUNCTION
+int *__PICOLIBC_ERRNO_FUNCTION(void) __picolibc_export;
+#define errno (*__PICOLIBC_ERRNO_FUNCTION())
+#else
+extern __picolibc_export __THREAD_LOCAL_ERRNO int errno;
+#define errno errno
+#endif
+
 #include <sys/errno.h>
+
+_END_STD_C
 
 #endif /* !__ERRNO_H__ */

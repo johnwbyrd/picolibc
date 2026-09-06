@@ -44,6 +44,7 @@
 #define __BLBF  0x0002 /* bufio is line buffered */
 #define __BFALL 0x0004 /* FILE is allocated by stdio */
 #define __BFPTR 0x0008 /* funcs need pointers instead of ints */
+#define __BPIPE 0x0010 /* FILE is opened with popen */
 
 union __file_bufio_cookie {
     int   fd;
@@ -83,37 +84,42 @@ struct __file_bufio {
 #ifdef __STDIO_BUFIO_LOCKING
     _LOCK_T lock;
 #endif
+#ifdef __STDIO_EXIT_FLUSH
+    FILE *next;
+#endif
 };
 
-#define FDEV_SETUP_BUFIO(_fd, _buf, _size, _read, _write, _lseek, _close, _rwflag, _bflags)   \
-    {                                                                                         \
-        .xfile = FDEV_SETUP_EXT(__bufio_put, __bufio_get, __bufio_flush, __bufio_close,       \
-                                __bufio_seek, __bufio_setvbuf, (_rwflag) | __SBUF),           \
-        .ptr = (void *)(intptr_t)(_fd), .dir = 0, .bflags = (_bflags), .pos = 0, .buf = _buf, \
-        .size = _size, .len = 0, .off = 0, { .read_int = _read }, { .write_int = _write },    \
-        { .lseek_int = _lseek },                                                              \
-        {                                                                                     \
-            .close_int = _close                                                               \
-        }                                                                                     \
+#define FDEV_SETUP_BUFIO(_fd, _buf, _size, _read, _write, _lseek, _close, _rwflag, _bflags)        \
+    {                                                                                              \
+        .xfile = FDEV_SETUP_EXT(__bufio_put, __bufio_get, __bufio_flush,                           \
+                                (_bflags) & (__BALL | __BFALL) ? __bufio_close : __bufio_close_nf, \
+                                __bufio_seek, NULL, (_rwflag) | __SBUF),                           \
+        .ptr = (void *)(intptr_t)(_fd), .dir = 0, .bflags = (_bflags), .pos = 0, .buf = _buf,      \
+        .size = _size, .len = 0, .off = 0, { .read_int = _read }, { .write_int = _write },         \
+        { .lseek_int = _lseek },                                                                   \
+        {                                                                                          \
+            .close_int = _close                                                                    \
+        }                                                                                          \
     }
 
-#define FDEV_SETUP_BUFIO_PTR(_ptr, _buf, _size, _read, _write, _lseek, _close, _rwflag, _bflags) \
-    {                                                                                            \
-        .xfile = FDEV_SETUP_EXT(__bufio_put, __bufio_get, __bufio_flush, __bufio_close,          \
-                                __bufio_seek, __bufio_setvbuf, (_rwflag) | __SBUF),              \
-        .ptr = _ptr, .dir = 0, .bflags = (_bflags) | __BFPTR, .pos = 0, .buf = _buf,             \
-        .size = _size, .len = 0, .off = 0, { .read_ptr = _read }, { .write_ptr = _write },       \
-        { .lseek_ptr = _lseek },                                                                 \
-        {                                                                                        \
-            .close_ptr = _close                                                                  \
-        }                                                                                        \
+#define FDEV_SETUP_BUFIO_PTR(_ptr, _buf, _size, _read, _write, _lseek, _close, _rwflag, _bflags)   \
+    {                                                                                              \
+        .xfile = FDEV_SETUP_EXT(__bufio_put, __bufio_get, __bufio_flush,                           \
+                                (_bflags) & (__BALL | __BFALL) ? __bufio_close : __bufio_close_nf, \
+                                __bufio_seek, NULL, (_rwflag) | __SBUF),                           \
+        .ptr = _ptr, .dir = 0, .bflags = (_bflags) | __BFPTR, .pos = 0, .buf = _buf,               \
+        .size = _size, .len = 0, .off = 0, { .read_ptr = _read }, { .write_ptr = _write },         \
+        { .lseek_ptr = _lseek },                                                                   \
+        {                                                                                          \
+            .close_ptr = _close                                                                    \
+        }                                                                                          \
     }
 
 #ifdef __STDIO_BUFIO_LOCKING
 void __bufio_lock_init(FILE *f);
 #endif
 
-static inline void
+static inline void __no_thread_safety_analysis
 __bufio_lock_close(FILE *f)
 {
 #ifdef __STDIO_BUFIO_LOCKING
@@ -126,19 +132,19 @@ __bufio_lock_close(FILE *f)
     (void)f;
 }
 
-static inline void
+static inline void __no_thread_safety_analysis
 __bufio_lock(FILE *f)
 {
 #ifdef __STDIO_BUFIO_LOCKING
     struct __file_bufio *bf = (struct __file_bufio *)f;
     if (!bf->lock)
-        __lock_init(bf->lock);
+        __bufio_lock_init(f);
     __lock_acquire(bf->lock);
 #endif
     (void)f;
 }
 
-static inline void
+static inline void __no_thread_safety_analysis
 __bufio_unlock(FILE *f)
 {
     (void)f;
@@ -165,5 +171,7 @@ off_t __bufio_seek(FILE *f, off_t offset, int whence);
 int   __bufio_setvbuf(FILE *f, char *buf, int mode, size_t size);
 
 int   __bufio_close(FILE *f);
+
+int   __bufio_close_nf(FILE *f);
 
 #endif /* _STDIO_BUFIO_H_ */

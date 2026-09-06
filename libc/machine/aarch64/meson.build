@@ -70,10 +70,12 @@ srcs_machine = [
   'strnlen.S',
   'strrchr-stub.c',
   'strrchr.S',
+  'sme-abi.S',
   'tls.c'
 ]
 
 subdir('machine')
+subdir('sys')
 
 foreach params : targets
   target = params['name']

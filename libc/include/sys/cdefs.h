@@ -89,6 +89,12 @@
  * can be safely replaced with nothing when not supported
  */
 
+#if __has_attribute(__visibility__)
+#define __picolibc_export __attribute__((__visibility__("default")))
+#else
+#define __picolibc_export
+#endif
+
 #if __has_attribute(__pure__)
 #define __pure __attribute__((__pure__))
 #else
@@ -292,6 +298,27 @@
 #endif
 
 /*
+ * Thread safety analysis annotations (Clang).
+ */
+#if __has_attribute(__capability__)
+#define __capability(x)                __attribute__((__capability__(x)))
+#define __acquire_capability(x)        __attribute__((__acquire_capability__(x)))
+#define __release_capability(x)        __attribute__((__release_capability__(x)))
+#define __try_acquire_capability(r, x) __attribute__((__try_acquire_capability__(r, x)))
+#define __requires_capability(x)       __attribute__((__requires_capability__(x)))
+#define __guarded_by(x)                __attribute__((__guarded_by__(x)))
+#define __no_thread_safety_analysis    __attribute__((__no_thread_safety_analysis__))
+#else
+#define __capability(x)
+#define __acquire_capability(x)
+#define __release_capability(x)
+#define __try_acquire_capability(r, x)
+#define __requires_capability(x)
+#define __guarded_by(x)
+#define __no_thread_safety_analysis
+#endif
+
+/*
  * Builtins.
  *
  * When __has_builtin isn't available, these need to be detected
@@ -303,6 +330,9 @@
 #endif
 #if __has_builtin(__builtin_alloca)
 #define __HAVE_BUILTIN_ALLOCA 1
+#endif
+#if __has_builtin(__builtin_complex) || defined(__GNUC__)
+#define __HAVE_BUILTIN_COMPLEX 1
 #endif
 #if __has_builtin(__builtin_copysign)
 #define __HAVE_BUILTIN_COPYSIGN 1
@@ -346,36 +376,137 @@
 #if __has_builtin(__builtin_isnanl)
 #define __HAVE_BUILTIN_ISNANL 1
 #endif
-#if __has_builtin(__builtin_issignalingl)
-#define __HAVE_BUILTIN_ISSIGNALINGL 1
+#if __has_builtin(__builtin_issignaling)
+#define __HAVE_BUILTIN_ISSIGNALING 1
 #endif
 #if __has_builtin(__builtin_mul_overflow)
 #define __HAVE_BUILTIN_MUL_OVERFLOW 1
 #endif
+#if __has_builtin(__builtin_stdc_bit_width)
+#define __HAVE_BUILTIN_STDC_BIT_WIDTH 1
+#endif
+#if __has_builtin(__builtin_constant_p)
+#define __HAVE_BUILTIN_CONSTANT_P 1
+#endif
+#if __has_builtin(__builtin_align_up)
+#define __HAVE_BUILTIN_ALIGN_UP 1
+#endif
+#if __has_builtin(__builtin_align_down)
+#define __HAVE_BUILTIN_ALIGN_DOWN 1
+#endif
+#if __has_builtin(__builtin_is_aligned)
+#define __HAVE_BUILTIN_IS_ALIGNED 1
+#endif
+#if __has_builtin(__builtin_expect)
+#define __HAVE_BUILTIN_EXPECT 1
+#endif
+#if __has_builtin(__builtin_unreachable)
+#define __HAVE_BUILTIN_UNREACHABLE 1
+#endif
 
-#if !__has_builtin(__builtin_expect)
+/*
+ * Provide some optimizing builtins; these don't affect the sematics
+ * of the generated code, they just guide optimization.
+ */
+#if !__HAVE_BUILTIN_EXPECT
 #define __builtin_expect(cond, exp) (cond)
 #endif
-#if !__has_builtin(__builtin_unreachable)
+
+#if !__HAVE_BUILTIN_UNREACHABLE
 #define __builtin_unreachable()
 #endif
 
 /* Alignment builtins for better type checking and improved code generation. */
 /* Provide fallback versions for other compilers (GCC/Clang < 10): */
-#if !__has_builtin(__builtin_is_aligned)
-#define __builtin_is_aligned(x, align) (((__uintptr_t)x & ((align) - 1)) == 0)
-#endif
-#if !__has_builtin(__builtin_align_up)
-#define __builtin_align_up(x, align)                                         \
+
+#if __HAVE_BUILTIN_ALIGN_UP
+#define __align_up(x, y) __builtin_align_up(x, y)
+#else
+#define __align_up(x, align)                                                 \
     ((__typeof__(x))(((__uintptr_t)(x) + ((align) - 1)) & (~((align) - 1))))
 #endif
-#if !__has_builtin(__builtin_align_down)
-#define __builtin_align_down(x, align) ((__typeof__(x))((x) & (~((align) - 1))))
+
+#if __HAVE_BUILTIN_ALIGN_DOWN
+#define __align_down(x, y) __builtin_align_down(x, y)
+#else
+#define __align_down(x, align) ((__typeof__(x))((x) & (~((align) - 1))))
 #endif
 
-#define __align_up(x, y)   __builtin_align_up(x, y)
-#define __align_down(x, y) __builtin_align_down(x, y)
+#if __HAVE_BUILTIN_IS_ALIGNED
 #define __is_aligned(x, y) __builtin_is_aligned(x, y)
+#else
+#define __is_aligned(x, align) (((__uintptr_t)x & ((align) - 1)) == 0)
+#endif
+
+/*
+ * __picolibc_bit_width returns the 'width' of its operand, which is
+ * one plus the bit position of the highest bit set in the value.
+ *
+ * This matches __builtin_stdc_bit_width, but with the type limited to
+ * size_t. There are four implementations based upon what builtins the
+ * compiler provides.
+ */
+#ifdef __HAVE_BUILTIN_STDC_BIT_WIDTH
+
+#define __picolibc_bit_width(a) __builtin_stdc_bit_width(a)
+
+#elif defined(__HAVE_BUILTIN_CLZG)
+
+static inline unsigned int
+__picolibc_bit_width(size_t a)
+{
+    unsigned int prec = sizeof(a) * 8;
+    return (unsigned int)(prec - __builtin_clzg(a, prec));
+}
+
+#elif defined(__HAVE_BUILTIN_CLZ) && __SIZEOF_SIZE_T__ == __SIZEOF_INT__
+
+static inline unsigned int
+__picolibc_bit_width(__SIZE_TYPE__ a)
+{
+    if (a == 0)
+        return 0;
+    return (unsigned int)(sizeof(a) * 8 - __builtin_clz(a));
+}
+
+#elif defined(__HAVE_BUILTIN_CLZL) && __SIZEOF_SIZE_T__ == __SIZEOF_LONG__
+
+static inline unsigned int
+__picolibc_bit_width(__SIZE_TYPE__ a)
+{
+    if (a == 0)
+        return 0;
+    return (unsigned int)(sizeof(a) * 8 - __builtin_clzl(a));
+}
+
+#else
+
+static inline unsigned int
+__picolibc_bit_width(__SIZE_TYPE__ a)
+{
+    unsigned int width = 0;
+    while (a) {
+        width++;
+        a >>= 1;
+    }
+    return width;
+}
+
+#endif
+
+#ifdef __HAVE_BUILTIN_ADD_OVERFLOW
+#define __picolibc_add_overflow(a, b, c) __builtin_add_overflow(a, b, c)
+#else
+#define __picolibc_add_overflow(a, b, c)                                                \
+    ({                                                                                  \
+        __typeof(a)  __a = (a);                                                         \
+        __typeof(b)  __b = (b);                                                         \
+        __typeof(*c) __c = __a + __b;                                                   \
+        int          __ret = ((__c < 0 && __a > 0 && __b > 0) || (__a < 0 && __b < 0)); \
+        (*c) = __c;                                                                     \
+        __ret;                                                                          \
+    })
+#endif
 
 /*
  * When the address sanitizer is enabled, we must prevent the library
@@ -460,10 +591,12 @@
 #endif
 #endif
 
+#if !__has_feature(c_alignof) && !__has_extension(c_alignof)
 #if defined(__cplusplus) && __cplusplus >= 201103L
 #define _Alignof(x) alignof(x)
 #else
 #define _Alignof(x) __alignof(x)
+#endif
 #endif
 
 #if !defined(__cplusplus) && !__has_feature(c_atomic) && !__has_feature(cxx_atomic) \
@@ -478,7 +611,7 @@
     }
 #endif
 
-#if !__has_feature(c_static_assert)
+#if !__has_feature(c_static_assert) && !__has_extension(c_static_assert)
 #if (defined(__cplusplus) && __cplusplus >= 201103L) || __has_feature(cxx_static_assert)
 #define _Static_assert(x, y) static_assert(x, y)
 #elif __GNUC_PREREQ__(4, 6) && !defined(__cplusplus)

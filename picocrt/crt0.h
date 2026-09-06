@@ -83,7 +83,7 @@ extern void __libc_init_array(void);
 
 #include <picotls.h>
 #include <stdio.h>
-#if defined(__ARM_SEMIHOST) || defined(__HEXAGON_ARCH__)
+#if defined(__ARM_SEMIHOST)
 int sys_semihost_get_cmdline(char *buf, int size);
 #endif
 
@@ -91,14 +91,25 @@ int sys_semihost_get_cmdline(char *buf, int size);
 #define CONSTRUCTORS 1
 #endif
 
+#if defined(CRT0_GET_CMDLINE)
+/* Hook for OS to provide command-line */
+int get_cmdline(char *buffer, int size);
+#endif
+
 static __noreturn __always_inline void
+#ifdef CRT0_LINUX
+__start(int argc, char **argv)
+#else
 __start(void)
+#endif
 {
 #ifndef NO_FLASH
     /* Initialize .data from FLASH when enabled */
     memcpy(__data_start, __data_source, (uintptr_t)__data_size);
 #endif
+#ifndef CRT0_LINUX
     memset(__bss_start, '\0', (uintptr_t)__bss_size);
+#endif
 #ifdef POST_MEMORY_SETUP
     POST_MEMORY_SETUP();
 #endif
@@ -114,7 +125,7 @@ __start(void)
     __libc_init_array();
 #endif
 
-#if defined(CRT0_SEMIHOST) && (defined(__ARM_SEMIHOST) || defined(__HEXAGON_ARCH__))
+#if defined(CRT0_GET_CMDLINE) || (defined(CRT0_SEMIHOST) && (defined(__ARM_SEMIHOST) || defined(__HEXAGON_ARCH__)))
 #if __SIZEOF_POINTER__ == 2
 #define CMDLINE_LEN 256 /* 16-bit targets: fits in 512-byte RIFF buffer */
 #else
@@ -124,8 +135,14 @@ __start(void)
     static char  cmdline[CMDLINE_LEN];
     static char *argv[ARGV_LEN];
     int          argc = 0;
+    int          get_cmdline_ret = 0;
 
-    if (sys_semihost_get_cmdline(cmdline, sizeof(cmdline)) == 0 && cmdline[0]) {
+#if defined(CRT0_GET_CMDLINE)
+    get_cmdline_ret = get_cmdline(cmdline, CMDLINE_LEN);
+#else
+    get_cmdline_ret = sys_semihost_get_cmdline(cmdline, CMDLINE_LEN);
+#endif
+    if (get_cmdline_ret == 0 && cmdline[0]) {
         char *c = cmdline;
 
         while (*c && argc < ARGV_LEN - 1) {
@@ -142,8 +159,10 @@ __start(void)
         argv[argc++] = "program-name";
     argv[argc] = NULL;
 #else
-#define argv NULL
+#ifndef CRT0_LINUX
 #define argc 0
+#define argv NULL
+#endif
 #endif
 
     int ret = main(argc, argv);

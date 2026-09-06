@@ -51,8 +51,11 @@ foreach params : targets
   target_c_args = params['c_args']
 
   _libs = [get_variable('lib_c' + target)]
-  if is_variable('lib_semihost' + target)
-    _libs += [get_variable('lib_semihost' + target)]
+  if is_variable(oslib_test + target)
+    _libs += [get_variable(oslib_test + target)]
+  endif
+  if is_variable(libfallback_var + target)
+    _libs += [get_variable(libfallback_var + target)]
   endif
 
   _lib_files=[]
@@ -79,7 +82,7 @@ foreach params : targets
     test_file_name_arg=['-DTEST_FILE_NAME="' + t1 + target + '.txt"']
 
     test(t1 + target,
-	 executable(t1 + target, [t1_src],
+	 executable(t1 + target, [t1_src] + test_lock_valid,
 		    c_args: printf_compile_args_d + test_file_name_arg + _c_args,
 		    link_args: printf_link_args_d + _link_args,
 		    objects: _objs,
@@ -97,69 +100,69 @@ if enable_native_tests
 
   localedef = find_program('localedef', required: true)
 
+  locale_env = test_env
+  locale_env.prepend('LOCPATH', meson.current_build_dir())
+
   ctype_c_args = []
 
   locales=[]
 
-  # need meson 0.57 so we can use 'env' in custom_target
-  if meson.version().version_compare('>=0.57')
-    if mb_capable
-      locale = 'fr_FR.UTF-8'
+  if mb_capable
+    locale = 'fr_FR.UTF-8'
+    locales += [custom_target(locale, output: locale,
+                              command: [localedef, '--no-warnings=ascii',
+                                        '-f', 'UTF-8', '-i', 'fr_FR', '.' / '@OUTPUT@'])]
+    locale = 'C.UTF-8'
+    locales += [custom_target(locale, output: locale,
+                              command: [localedef, '--no-warnings=ascii',
+                                        '-f', 'UTF-8', '-i', 'C', '.' / '@OUTPUT@'])]
+    ctype_c_args += ['-DHAVE_UTF_CHARSETS']
+  endif
+  if mb_extended_charsets
+    # CP720 doesn't have any Linux support.
+    # JIS doesn't make any sense to me.
+    # CP1255 and CP1258 seem to be broken in Linux
+    foreach ctype : ['ISO-8859-1', 'ISO-8859-2', 'ISO-8859-3', 'ISO-8859-4',
+                     'ISO-8859-5', 'ISO-8859-6', 'ISO-8859-7', 'ISO-8859-8',
+                     'ISO-8859-9', 'ISO-8859-10', 'ISO-8859-11', 'ISO-8859-13',
+                     'ISO-8859-14', 'ISO-8859-15', 'ISO-8859-16',
+
+                     'GEORGIAN-PS', 'PT154', 'KOI8-T', 'CP437', 'CP737', 'CP775',
+                     'CP850', 'CP852', 'CP855', 'CP857', 'CP858', 'CP862', 'CP866',
+                     'CP874', 'CP1125', 'CP1250', 'CP1251', 'CP1252', 'CP1253',
+                     'CP1254', 'CP1256', 'CP1257', 'KOI8-R', 'KOI8-U',
+
+                     'SHIFT-JIS', 'EUC-JP']
+      locale = 'C.' + ctype
+      if ctype == 'SHIFT-JIS'
+        ctype = 'SHIFT_JIS'
+      elif ctype == 'CP437'
+        ctype = 'IBM437'
+      elif ctype == 'CP850'
+        ctype = 'IBM850'
+      elif ctype == 'CP852'
+        ctype = 'IBM852'
+      elif ctype == 'CP855'
+        ctype = 'IBM855'
+      elif ctype == 'CP857'
+        ctype = 'IBM857'
+      elif ctype == 'CP858'
+        ctype = 'IBM858'
+      elif ctype == 'CP862'
+        ctype = 'IBM862'
+      elif ctype == 'CP866'
+        ctype = 'IBM866'
+      elif ctype == 'CP874'
+        ctype = 'IBM874'
+      endif
       locales += [custom_target(locale, output: locale,
                                 command: [localedef, '--no-warnings=ascii',
-                                          '-f', 'UTF-8', '-i', 'fr_FR', '.' / '@OUTPUT@'])]
-      locale = 'C.UTF-8'
-      locales += [custom_target(locale, output: locale,
-                                command: [localedef, '--no-warnings=ascii',
-                                          '-f', 'UTF-8', '-i', 'C', '.' / '@OUTPUT@'])]
-      ctype_c_args += ['-DHAVE_UTF_CHARSETS']
-    endif
-    if mb_extended_charsets
-      # CP720 doesn't have any Linux support.
-      # JIS doesn't make any sense to me.
-      # CP1255 and CP1258 seem to be broken in Linux
-      foreach ctype : ['ISO-8859-1', 'ISO-8859-2', 'ISO-8859-3', 'ISO-8859-4',
-                       'ISO-8859-5', 'ISO-8859-6', 'ISO-8859-7', 'ISO-8859-8',
-                       'ISO-8859-9', 'ISO-8859-10', 'ISO-8859-11', 'ISO-8859-13',
-                       'ISO-8859-14', 'ISO-8859-15', 'ISO-8859-16',
-
-                       'GEORGIAN-PS', 'PT154', 'KOI8-T', 'CP437', 'CP737', 'CP775',
-                       'CP850', 'CP852', 'CP855', 'CP857', 'CP858', 'CP862', 'CP866',
-                       'CP874', 'CP1125', 'CP1250', 'CP1251', 'CP1252', 'CP1253',
-                       'CP1254', 'CP1256', 'CP1257', 'KOI8-R', 'KOI8-U',
-
-                       'SHIFT-JIS', 'EUC-JP']
-        locale = 'C.' + ctype
-        if ctype == 'SHIFT-JIS'
-          ctype = 'SHIFT_JIS'
-        elif ctype == 'CP437'
-          ctype = 'IBM437'
-        elif ctype == 'CP850'
-          ctype = 'IBM850'
-        elif ctype == 'CP852'
-          ctype = 'IBM852'
-        elif ctype == 'CP855'
-          ctype = 'IBM855'
-        elif ctype == 'CP857'
-          ctype = 'IBM857'
-        elif ctype == 'CP858'
-          ctype = 'IBM858'
-        elif ctype == 'CP862'
-          ctype = 'IBM862'
-        elif ctype == 'CP866'
-          ctype = 'IBM866'
-        elif ctype == 'CP874'
-          ctype = 'IBM874'
-        endif
-        locales += [custom_target(locale, output: locale,
-                                  command: [localedef, '--no-warnings=ascii',
-                                            '-f', ctype, '-i', 'C', '.' / '@OUTPUT@'])]
-      endforeach
-      ctype_c_args += ['-DHAVE_ISO_CHARSETS',
-                       '-DHAVE_WINDOWS_CHARSETS',
-                       '-DHAVE_JIS_CHARSETS'
-                      ]
-    endif
+                                          '-f', ctype, '-i', 'C', '.' / '@OUTPUT@'])]
+    endforeach
+    ctype_c_args += ['-DHAVE_ISO_CHARSETS',
+                     '-DHAVE_WINDOWS_CHARSETS',
+                     '-DHAVE_JIS_CHARSETS'
+                    ]
   endif
 
   foreach t1 : tests_ctype
@@ -169,10 +172,10 @@ if enable_native_tests
 
     test(t1_name,
 	 executable(t1_name, t1_src,
-		    c_args: native_c_args + ctype_c_args,
+		    c_args: native_c_args + test_file_name_arg + ctype_c_args,
 		    link_args: native_c_args),
          suite: 'test-ctype',
-         env: ['LOCPATH=' + meson.current_build_dir()])
+         env: locale_env)
   endforeach
 
   diff = find_program('diff', required: false)
@@ -195,21 +198,17 @@ if enable_native_tests
                  include_directories: inc)
 
       out = custom_target (o, output: o,
-                           command: [e, '@OUTPUT@'])
+                           command: [e, '@OUTPUT@'],
+                           env: locale_env)
 
       ne = executable(n, src, 
                       c_args: native_c_args + ctype_c_args,
                       link_args: native_c_args)
 
-      if locales != [] and meson.version().version_compare('>=0.57')
-        native_out = custom_target (no, output: no,
-                                    depends: locales,
-                                    env: ['LOCPATH=' + meson.current_build_dir()],
-                                    command: [ne, '@OUTPUT@'])
-      else
-        native_out = custom_target (no, output: no,
-                                    command: [ne, '@OUTPUT@'])
-      endif
+      native_out = custom_target (no, output: no,
+                                  depends: locales,
+                                  env: locale_env,
+                                  command: [ne, '@OUTPUT@'])
 
       test(test, diff, args: ['-u', out, native_out])
     endforeach

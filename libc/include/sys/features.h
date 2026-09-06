@@ -141,8 +141,6 @@ extern "C" {
 #define _XOPEN_SOURCE 700
 #undef _XOPEN_SOURCE_EXTENDED
 #define _XOPEN_SOURCE_EXTENDED 1
-#undef _LARGEFILE64_SOURCE
-#define _LARGEFILE64_SOURCE 1
 #endif /* _GNU_SOURCE */
 
 /* When building for Zephyr, set _ZEPHYR_SOURCE unless some other API
@@ -259,7 +257,7 @@ extern "C" {
  *	g++ -std=c++11 or newer (on by default since GCC 6), or with
  *	_ISOC11_SOURCE.
  *
- * __ISO_C_VISIBLE >= 2020
+ * __ISO_C_VISIBLE >= 2023
  *	ISO C23; enabled with gcc -std=c23 or newer,
  *	g++ -std=c++20 or newer, or with
  *	_ISOC23_SOURCE or _ISOC2x_SOURCE.
@@ -270,9 +268,6 @@ extern "C" {
  *
  * __LARGEFILE_VISIBLE
  *	fseeko, ftello; enabled with _LARGEFILE_SOURCE or _XOPEN_SOURCE >= 500.
- *
- * __LARGEFILE64_VISIBLE
- *      additional large file extensions; enabled with _LARGEFILE64_SOURCE.
  *
  * __BSD_VISIBLE
  *	BSD extensions; enabled by default, or with _BSD_SOURCE.
@@ -343,12 +338,6 @@ extern "C" {
 #define __LARGEFILE_VISIBLE 1
 #else
 #define __LARGEFILE_VISIBLE 0
-#endif
-
-#ifdef _LARGEFILE64_SOURCE
-#define __LARGEFILE64_VISIBLE 1
-#else
-#define __LARGEFILE64_VISIBLE 0
 #endif
 
 #ifdef _DEFAULT_SOURCE

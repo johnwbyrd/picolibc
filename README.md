@@ -63,26 +63,29 @@ but no integrated testing available for additional architectures:
  * Sparc64
  * Xtensa (ESP8266, LX106)
 
-Supporting architectures that already have Newlib code requires:
+Supporting new architectures requires:
 
- 1. libc/machine/_architecture_/meson.build to build the
-    architecture-specific libc bits. This should at least include
-    setjmp/longjmp support as these cannot be performed in
-    architecture independent code and are needed by libstdc++.
+ 1. Add libc/machine/_architecture_ for architecture-specific libc
+    bits. This should at least include setjmp/longjmp support as these
+    cannot be performed in architecture independent code and are
+    needed by libstdc++. If available, it should also include thread
+    local storage setup code as libc/machine/_architecture_/tls.c; the
+    build system looks for that file by name when determining if TLS
+    is available.
 
- 2. Checking for atomic support for tinystdio. Tinystdio requires
+ 2. Checking for atomic support for stdio. Picolibc requires
     atomics for ungetc to work correctly in a reentrant
     environment. By default, it stores them in 16-bit values, but
     some architectures only have 32-bit atomics. To avoid ABI
     issues, the size selected isn't detected automatically, instead
-    it must be configured in libc/tinystdio/stdio.h.
+    it must be configured in libc/include/stdio.h.
 
- 3. libm/machine/_architecture_/meson.build to build any
-    architecture-specific libm bits
+ 3. If necessary, add libm/machine/_architecture_ for any
+    architecture-specific math bits
 
  4. picocrt/machine/_architecture_ source code and build bits
     for startup code needed for the architecture. Useful in all
-    cases, but this is necessary to run tests under qemu if your
+    cases, but this is necessary to run tests under emulation if your
     platform can do that.
 
  5. cross-_gcc-triple_.txt to configure the meson cross-compilation
@@ -91,37 +94,16 @@ Supporting architectures that already have Newlib code requires:
  6. do-_architecture_-configure to make testing the cross-compilation
     setup easier.
 
- 7. libc/picolib support. This should include whatever startup
-    helpers are required (like ARM interrupt vector) and TLS support
-    (if your compiler includes this).
-
- 8. run-_architecture_ script to run tests under QEMU. Look at the ARM
+ 7. run-_architecture_ script to run tests under QEMU. Look at the ARM
     and RISC-V examples to get a sense of what this needs to do and
     how it gets invoked from the cross-_gcc-triple_.txt configuration
     file.
 
 ## Relation to newlib
 
-Picolibc is mostly built from pieces of newlib, and retains the
-directory structure of that project. While there have been a lot of
-changes in the build system and per-thread data storage, the bulk of
-the source code remains unchanged.
-
-To keep picolibc and newlib code in sync, newlib changes will be
-regularly incorporated. To ease integration of these changes into
-picolibc, some care needs to be taken while editing the code:
-
- * Files should not be renamed.
- * Fixes that also benefit users of newlib should also be sent to the
-   newlib project
- * Changes, where possible, should be made in a way compatible with
-   newlib design. For example, instead of using 'errno' (which is
-   valid in picolibc), use __errno_r(r), even when 'r' is not defined
-   in the local context.
-
-The bulk of newlib changes over the last several years have been in
-areas unrelated to the code used by picolibc, so keeping things in
-sync has not been difficult so far.
+Picolibc includes a lot of code originally from newlib. However, it
+has been reformatted and restructured to make it easier to read and
+maintain going forward.
 
 Here's a list of some differences between picolibc and newlib:
 
@@ -134,13 +116,12 @@ Here's a list of some differences between picolibc and newlib:
     constraints, so much work has been done to improve the ABI and API
     for use in embedded systems.
 
- 2. Tinystdio. This new stdio implementation borrows some code from
-    AVR-Libc along with substantial new code. The goal of tinystdio is
-    to remain compatible with relevant C and POSIX standards while
-    using a very narrow API to the underlying system (it only requires
-    getc and putc) along with doing no internal allocation and using a
-    minimal amount of RAM (16 bytes on a 32 bit system for
-    stdin/stdout/stderr).
+ 2. Stdio. Picolibc's stdio implementation borrows some code from
+    AVR-Libc along with substantial new code. The goal is to remain
+    compatible with relevant C and POSIX standards while using a very
+    narrow API to the underlying system (it only requires getc and
+    putc) along with doing no internal allocation and using a minimal
+    amount of RAM.
 
  3. Thread-local-storage support. Instead of creating a large data
     structure containing all possible thread-specific data, Picolibc
@@ -149,10 +130,11 @@ Here's a list of some differences between picolibc and newlib:
     API called by the application. Typically, this means you use only
     4 bytes for errno.
 
- 4. Integrated test suite. The old newlib test code, which hasn't
-    worked for years, has been fixed up and is used to test changes to
-    the library. The test suite was used to correct numerous bugs in
-    the library; many of those changes have been passed on to newlib.
+ 4. Integrated test suite. Along with dozens of new tests, picolibc
+    includes tests from newlib and musl. These tests are run as a part
+    of the patch review process and new code or bugfixes are expected
+    to include tests that verify functionality and keep bugs from
+    recurring.
 
  5. Bare-metal startup code and linker scripts for many
     architectures. These may not support precisely what your
@@ -168,7 +150,7 @@ Here's a list of some differences between picolibc and newlib:
  7. Narrow and well-defined POSIX OS requirements. Portions of
     Picolibc which require underlying OS support are documented so
     that you will know which functions are necessary based on the API
-    in use. In particular, tinystdio requires no POSIX functions to
+    in use. In particular, picolibc requires no POSIX functions to
     support stdin/stdout/stderr, and instead requires only functions
     to get and put single characters to the target device.
 
@@ -205,10 +187,112 @@ use Picolibc:
  * [Picolibc as embedded source](doc/embedsource.md)
  * [Releasing Picolibc](doc/releasing.md)
  * [Copyright and license information](COPYING.picolibc)
+ * [Thread Safety in Picolibc](doc/thread-safety.md)
 
 ## Releases
 
-### Picolibc release 1.8.next
+### Picolibc release 1.8.12
+
+ * Native Linux support on a couple of architectures. This allows
+   building of numerous Linux applications and test cases.
+
+ * Clean up some picolibc structs that attempted to match native Linux
+   layout. Instead, map the contents at runtime, just like the new
+   native linux syscall support does.
+
+ * Eliminate off64_t type; off_t is always 64 bits.
+
+ * Fix iconv to not write partial codepoints to conform
+   to the spec.
+
+ * vfprintf("%lc") takes a wint_t parameter, not int. This only
+   matters when int is smaller than 32 bits (as on msp430).  Make %lc
+   work with a L'\0' value and ignore any specified precision.
+
+ * Fix some corner cases in vfprintf when wchar_t is 16 bits.
+
+ * Use an array for strerror instead of a switch statement.
+
+ * In ARM semihosting, preserve LR register and add an option
+   to use hlt instead of svc for arm arch >= 8 as that's the
+   new recommendation. Thanks to Simi Pallipurath.
+
+ * Add POSIX group file functions (getgrname et al).
+
+ * Add vectorized memset, memcpy and memmove for RISC-V. Thanks to
+   Pincheng Wang.
+
+ * Eliminate recursive locking of libc lock.
+
+ * Simplify arc4random state and fork detection logic.
+
+ * Fix possible NULL pointer dereference in the mbrtoc
+   functions. Thanks to Gergely Futo.
+
+ * Provide semihosting calls for Hexagon. Thanks to Kushal Pal and
+   Zain Siddavatam.
+
+ * Fix vfprintf_s thread safety analysis warning. Thanks to Brian
+   Cain.
+
+ * Add clang thread safety analysis annotations for functions which
+   change lock state.  Thanks to Brian Cain.
+
+ * Fix strerror_r to handle missing entries in errnames array. Thanks
+   to mrashad.
+
+ * Remove --gc-sections from picolibc.specs. This was more important
+   when the vfprintf and vfscanf variants were tied together to avoid
+   pulling in a vfscanf implementation.
+
+ * Make CI report the detected code formatting errors. Thanks to
+   Kushal Pal.
+
+ * Add 32-bit vector implementations for memmove, memcpy and
+   memset. Thanks to Abdallah Abdelhafeez.
+
+ * Fix generic C version of riscv memcpy so the loop only copies 8
+   elements rather than 9. Thanks to Abdallah Abdelhafeez.
+   
+ * Add fopencookie and open_memstream. Thanks to Alexey Lapshin.
+
+ * Improve performance of riscv strcmp function by re-ordering
+   instructions. Thanks to Abdallah Abdelhafeez.
+
+ * Add Hexagon floating point environment support. Thanks to Zain
+   Siddavatam.
+
+ * Fix bufio lazy lock initialization race. Thanks to Kushal Pal.
+
+ * Add support for riscv Zcmt extension. Thanks to Sam Elliott.
+
+ * Fix fflush(NULL) when -Dstdio-exit-flush=true. Thanks to Kushal Pal
+   for finding this bug.
+
+ * Test arm code using FVP. Thanks to Mark Murray.
+
+ * Add Hexagon assembly for various memory/string operations. Thanks
+   to Kushal Pal.
+
+ * Make directory used by various temporary file functions
+   configurable. Use /tmp for the native Linux ports. Thanks to Zain
+   Siddavatam.
+
+ * Add Hexagon optimized math functions. Thanks to Zain Siddavatam.
+
+ * Initialize AArch64 SME in picocrt. Thanks to Mark Murray.
+
+ * Add crt variant that enables riscv zicfilp/zicfiss features. Thanks
+   to Ahmed Shehab.
+
+ * Add dynamic linking support for Hexagon. Thanks to Kushal Pal.
+
+ * Add quick_exit and at_quick_exit. Thanks to Kushal Pal.
+
+ * Fix undefined behavior in floating point printf. Thanks to Alberto
+   Escolar Piedras.
+ 
+### Picolibc release 1.8.11
 
  * Use __math_inexact to generate FE_INEXACT in several math
    functions. Thanks to Gergely Futo.
@@ -275,6 +359,36 @@ use Picolibc:
  * Fix -long_option parsing in getopt_long_only.
 
  * Add strfmon and strfmon_l as required by POSIX.
+
+ * Add dprintf and vdprintf as required by POSIX.
+
+ * Improve JIS transcoding performance by building translation tables
+   in both directions.
+
+ * Fix a bunch of iconv bugs and improve POSIX conformance by
+   supporting //IGNORE, //DISCARD and //TRANSLIT modes.
+
+ * Reformat code with clang-format
+
+ * Restructure directories, moving libc and libm to the top level and
+   moving all tests under tests/. Remove stdio and malloc variants.
+
+ * Add 'no-flash' crt0 variant, thanks to Kushal Pal.
+
+ * Update minimum required meson version from 0.53 to 0.61.
+
+ * Add -Dfstat-bufsiz option that uses fstat to select stdio buffer
+   sizes. Thanks to Alexey Lapshin.
+
+ * Rewrite __rem_pio2f. This new version is faster than the old while
+   remaining API compatible and not using double datatypes.
+
+ * Update libc/machine/riscv. Thanks to Yuriy Kolerov.
+
+ * Fix the way the zicsr extension is enabled while building the crt0
+   code. Thanks to Yuriy Kolerov.
+
+ * Avoid linking in malloc when using bufio with static FILEs.
 
 ### Picolibc release 1.8.10
 
